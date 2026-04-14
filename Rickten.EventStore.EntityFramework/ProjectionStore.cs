@@ -47,6 +47,8 @@ public sealed class ProjectionStore : IProjectionStore
         TState state,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(state);
+
         var entity = await _context.Projections
             .FirstOrDefaultAsync(
                 p => p.ProjectionKey == projectionKey,
