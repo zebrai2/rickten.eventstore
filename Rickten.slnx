@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Rickten.EventStore.EntityFramework/Rickten.EventStore.EntityFramework.csproj" />
+  <Project Path="Rickten.EventStore.Tests/Rickten.EventStore.Tests.csproj" />
+  <Project Path="Rickten.EventStore/Rickten.EventStore.csproj" />
+</Solution>
