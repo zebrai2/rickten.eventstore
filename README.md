@@ -356,34 +356,6 @@ services.AddEventStore(options =>
 });
 ```
 
-### Advanced Setup: Separate Stores
-
-Use this when you want different databases or configurations:
-
-```csharp
-// Events in SQL Server (write-optimized)
-services.AddEventStoreOnly(options =>
-    options.UseSqlServer(eventsConnectionString));
-
-// Snapshots in Azure Blob Storage (hypothetical custom implementation)
-services.AddSnapshotStoreOnly(options =>
-    options.UseSqlServer(snapshotsConnectionString));
-
-// Projections in PostgreSQL (read-optimized)
-services.AddProjectionStoreOnly(options =>
-    options.UseNpgsql(projectionsConnectionString));
-```
-
-### Lifetime Configuration
-
-Control service lifetimes (default is `Scoped`):
-
-```csharp
-services.AddEventStoreOnly(
-    options => options.UseSqlServer(connectionString),
-    lifetime: ServiceLifetime.Transient);
-```
-
 ## 📝 Working with Events
 
 ### Appending Events

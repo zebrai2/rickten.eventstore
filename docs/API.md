@@ -525,39 +525,6 @@ public static IServiceCollection AddEventStoreSqlServer(
     string connectionString)
 ```
 
-#### AddEventStoreOnly
-
-Registers only IEventStore with separate configuration.
-
-```csharp
-public static IServiceCollection AddEventStoreOnly(
-    this IServiceCollection services,
-    Action<DbContextOptionsBuilder> optionsAction,
-    ServiceLifetime lifetime = ServiceLifetime.Scoped)
-```
-
-#### AddSnapshotStoreOnly
-
-Registers only ISnapshotStore with separate configuration.
-
-```csharp
-public static IServiceCollection AddSnapshotStoreOnly(
-    this IServiceCollection services,
-    Action<DbContextOptionsBuilder> optionsAction,
-    ServiceLifetime lifetime = ServiceLifetime.Scoped)
-```
-
-#### AddProjectionStoreOnly
-
-Registers only IProjectionStore with separate configuration.
-
-```csharp
-public static IServiceCollection AddProjectionStoreOnly(
-    this IServiceCollection services,
-    Action<DbContextOptionsBuilder> optionsAction,
-    ServiceLifetime lifetime = ServiceLifetime.Scoped)
-```
-
 ---
 
 ## Version History
