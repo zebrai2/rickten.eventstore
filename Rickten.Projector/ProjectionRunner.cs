@@ -44,7 +44,7 @@ public static class ProjectionRunner
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
-            lastVersion = streamEvent.StreamPointer.Version;
+            lastVersion = streamEvent.GlobalPosition;
         }
 
         return (view, lastVersion);
@@ -105,7 +105,7 @@ public static class ProjectionRunner
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
-            lastVersion = streamEvent.StreamPointer.Version;
+            lastVersion = streamEvent.GlobalPosition;
         }
 
         // Save updated checkpoint if we processed any events

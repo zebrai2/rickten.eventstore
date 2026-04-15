@@ -441,24 +441,24 @@ CREATE TABLE Events (
     StreamType NVARCHAR(255) NOT NULL,
     StreamIdentifier NVARCHAR(255) NOT NULL,
     Version BIGINT NOT NULL,
-    GlobalPosition BIGINT NOT NULL IDENTITY,
     EventType NVARCHAR(255) NOT NULL,
     EventData NVARCHAR(MAX) NOT NULL,
     Metadata NVARCHAR(MAX) NOT NULL,
     CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    
+
     CONSTRAINT UQ_Events_Stream_Version 
         UNIQUE (StreamType, StreamIdentifier, Version)
 );
 
-CREATE INDEX IX_Events_GlobalPosition ON Events (GlobalPosition);
+CREATE INDEX IX_Events_GlobalPosition ON Events (Id);
 CREATE INDEX IX_Events_Stream ON Events (StreamType, StreamIdentifier);
 ```
 
 **Design Rationale:**
-- `GlobalPosition` - Auto-incrementing for global ordering
-- `(StreamType, StreamIdentifier, Version)` - Unique for concurrency
-- Indexes support both stream queries and global queries
+- `Id` - Auto-incrementing primary key that serves as the global position across all streams
+- `(StreamType, StreamIdentifier, Version)` - Unique constraint for optimistic concurrency control
+- Indexes support both stream-specific queries and global ordering queries
+- Single IDENTITY column ensures strict sequential ordering of events
 
 ### Snapshots Table
 

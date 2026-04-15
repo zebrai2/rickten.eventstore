@@ -64,6 +64,7 @@ internal class InMemoryEventStore : IEventStore
             _globalPosition++;
             var streamEvent = new StreamEvent(
                 new StreamPointer(streamId, currentVersion),
+                _globalPosition,
                 evt.Event,
                 null);
             _events.Add((streamEvent, _globalPosition));

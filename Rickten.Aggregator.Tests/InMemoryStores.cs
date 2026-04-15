@@ -6,6 +6,7 @@ public class InMemoryEventStore : IEventStore
 {
     private readonly Dictionary<string, List<StreamEvent>> _streams = new();
     private readonly object _lock = new();
+    private long _globalPosition = 0;
 
     public async Task<IReadOnlyList<StreamEvent>> AppendAsync(
         StreamPointer pointer,
@@ -37,12 +38,14 @@ public class InMemoryEventStore : IEventStore
             foreach (var appendEvent in events)
             {
                 version++;
+                _globalPosition++;
                 var metadata = appendEvent.Metadata?
                     .Select(m => new EventMetadata("Test", m.Key, m.Value))
                     .ToList() ?? [];
 
                 var streamEvent = new StreamEvent(
                     new StreamPointer(pointer.Stream, version),
+                    _globalPosition,
                     appendEvent.Event,
                     metadata);
 
@@ -91,8 +94,8 @@ public class InMemoryEventStore : IEventStore
         {
             allEvents = _streams.Values
                 .SelectMany(stream => stream)
-                .Where(e => e.StreamPointer.Version >= fromVersion)
-                .OrderBy(e => e.StreamPointer.Version)
+                .Where(e => e.GlobalPosition >= fromVersion)
+                .OrderBy(e => e.GlobalPosition)
                 .ToList();
         }
 

@@ -66,6 +66,7 @@ public class ProjectionTests
         var streamId = new StreamIdentifier("Test", "1");
         var streamEvent = new StreamEvent(
             new StreamPointer(streamId, 1),
+            1,
             new TestEvent(),
             null);
 
@@ -82,6 +83,7 @@ public class ProjectionTests
         var streamId = new StreamIdentifier("Product", "1");
         var streamEvent = new StreamEvent(
             new StreamPointer(streamId, 1),
+            1,
             new TestEvent(),
             null);
 
