@@ -35,3 +35,6 @@ jobs:
 
     - name: Publish Rickten.EventStore.EntityFramework to NuGet
       run: dotnet nuget push ./artifacts/Rickten.EventStore.EntityFramework.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+    - name: Publish Rickten.Aggregator to NuGet
+      run: dotnet nuget push ./artifacts/Rickten.Aggregator.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -6,6 +6,33 @@ A lightweight, flexible **Event Sourcing** library for .NET with Entity Framewor
 [![C# 14.0](https://img.shields.io/badge/C%23-14.0-blue)](https://docs.microsoft.com/en-us/dotnet/csharp/)
 [![Entity Framework Core](https://img.shields.io/badge/EF%20Core-10.0-green)](https://docs.microsoft.com/en-us/ef/core/)
 
+## 📦 Packages
+
+This repository contains three NuGet packages:
+
+### **Rickten.EventStore**
+Core event sourcing abstractions and contracts. Provides `IEventStore`, `ISnapshotStore`, and `IProjectionStore` interfaces.
+
+```bash
+dotnet add package Rickten.EventStore
+```
+
+### **Rickten.EventStore.EntityFramework**
+Entity Framework Core implementation of the event store with support for SQL Server, PostgreSQL, SQLite, and in-memory databases.
+
+```bash
+dotnet add package Rickten.EventStore.EntityFramework
+```
+
+### **Rickten.Aggregator**
+Lightweight library for implementing event-sourced aggregates with clean separation between state folding and command decision-making. Features strict-by-default validation.
+
+```bash
+dotnet add package Rickten.Aggregator
+```
+
+[📖 Read the Aggregator documentation →](Rickten.Aggregator/README.md)
+
 ## 📋 Table of Contents
 
 - [Features](#-features)
@@ -34,12 +61,16 @@ A lightweight, flexible **Event Sourcing** library for .NET with Entity Framewor
 - ✅ **Async/Await** - Modern async patterns with `IAsyncEnumerable`
 - ✅ **Strong Typing** - Type-safe event handling with records
 - ✅ **Metadata Support** - Attach metadata to events (correlation IDs, causation IDs, etc.)
+- ✅ **Aggregate Pattern Support** - Clean command/event/state separation with Rickten.Aggregator
 
 ## 📦 Installation
 
 ```bash
 # Install the core library and EF Core provider
 dotnet add package Rickten.EventStore.EntityFramework
+
+# Optional: Add aggregator support
+dotnet add package Rickten.Aggregator
 
 # Optional: Add database-specific providers
 dotnet add package Microsoft.EntityFrameworkCore.SqlServer

@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="Rickten.Aggregator.Tests/Rickten.Aggregator.Tests.csproj" />
+  <Project Path="Rickten.Aggregator/Rickten.Aggregator.csproj" />
   <Project Path="Rickten.EventStore.EntityFramework/Rickten.EventStore.EntityFramework.csproj" />
   <Project Path="Rickten.EventStore.Tests/Rickten.EventStore.Tests.csproj" />
   <Project Path="Rickten.EventStore/Rickten.EventStore.csproj" />
