@@ -7,6 +7,7 @@ public sealed class EventEntity
 {
     /// <summary>
     /// Gets or sets the unique identifier for this event record.
+    /// This serves as the global position across all streams.
     /// </summary>
     public long Id { get; set; }
 
@@ -26,9 +27,9 @@ public sealed class EventEntity
     public long Version { get; set; }
 
     /// <summary>
-    /// Gets or sets the global position of this event across all streams.
+    /// Gets the global position of this event across all streams (same as Id).
     /// </summary>
-    public long GlobalPosition { get; set; }
+    public long GlobalPosition => Id;
 
     /// <summary>
     /// Gets or sets the event type name.

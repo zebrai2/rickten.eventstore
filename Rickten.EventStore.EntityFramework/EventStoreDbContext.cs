@@ -56,10 +56,6 @@ public sealed class EventStoreDbContext : DbContext
             entity.Property(e => e.Version)
                 .IsRequired();
 
-            entity.Property(e => e.GlobalPosition)
-                .IsRequired()
-                .ValueGeneratedOnAdd();
-
             entity.Property(e => e.EventType)
                 .IsRequired()
                 .HasMaxLength(255);
@@ -79,8 +75,8 @@ public sealed class EventStoreDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName("IX_Events_Stream_Version");
 
-            // Index for global position queries
-            entity.HasIndex(e => e.GlobalPosition)
+            // Index for global position queries (using Id)
+            entity.HasIndex(e => e.Id)
                 .HasDatabaseName("IX_Events_GlobalPosition");
 
             // Index for stream queries

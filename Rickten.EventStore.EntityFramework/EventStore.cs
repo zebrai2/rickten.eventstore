@@ -47,7 +47,7 @@ public sealed class EventStore : IEventStore
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var query = _context.Events
-            .Where(e => e.GlobalPosition >= fromGlobalPosition);
+            .Where(e => e.Id >= fromGlobalPosition);
 
         if (streamTypeFilter?.Length > 0)
         {
@@ -60,7 +60,7 @@ public sealed class EventStore : IEventStore
         }
 
         var events = query
-            .OrderBy(e => e.GlobalPosition)
+            .OrderBy(e => e.Id)
             .AsAsyncEnumerable();
 
         await foreach (var entity in events.WithCancellation(cancellationToken))
@@ -180,6 +180,7 @@ public sealed class EventStore : IEventStore
 
         return new StreamEvent(
             streamPointer,
+            entity.GlobalPosition,
             eventData,
             metadata);
     }
