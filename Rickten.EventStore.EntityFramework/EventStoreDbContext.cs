@@ -37,6 +37,8 @@ public sealed class EventStoreDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        var utcNowSql = GetUtcNowSql();
+
         // Configure EventEntity
         modelBuilder.Entity<EventEntity>(entity =>
         {
@@ -68,7 +70,7 @@ public sealed class EventStoreDbContext : DbContext
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired()
-                .HasDefaultValueSql("GETUTCDATE()"); // SQL Server default, override for other providers
+                .HasDefaultValueSql(utcNowSql);
 
             // Unique constraint for optimistic concurrency
             entity.HasIndex(e => new { e.StreamType, e.StreamIdentifier, e.Version })
@@ -106,7 +108,7 @@ public sealed class EventStoreDbContext : DbContext
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired()
-                .HasDefaultValueSql("GETUTCDATE()");
+                .HasDefaultValueSql(utcNowSql);
         });
 
         // Configure ProjectionEntity
@@ -127,7 +129,19 @@ public sealed class EventStoreDbContext : DbContext
 
             entity.Property(e => e.UpdatedAt)
                 .IsRequired()
-                .HasDefaultValueSql("GETUTCDATE()");
+                .HasDefaultValueSql(utcNowSql);
         });
+    }
+
+    private string GetUtcNowSql()
+    {
+        return Database.ProviderName switch
+        {
+            "Microsoft.EntityFrameworkCore.SqlServer" => "GETUTCDATE()",
+            "Npgsql.EntityFrameworkCore.PostgreSQL" => "NOW() AT TIME ZONE 'UTC'",
+            "Microsoft.EntityFrameworkCore.Sqlite" => "datetime('now')",
+            "Microsoft.EntityFrameworkCore.InMemory" => "GETUTCDATE()",
+            _ => "GETUTCDATE()"
+        };
     }
 }
