@@ -262,6 +262,7 @@ Represents a persisted event with its metadata:
 ```csharp
 public record StreamEvent(
     StreamPointer StreamPointer,
+    long GlobalPosition,
     object Event,
     IReadOnlyList<EventMetadata> Metadata
 );
@@ -468,12 +469,12 @@ public async Task ProcessAllEventsExample(IEventStore eventStore)
         fromGlobalPosition: lastPosition))
     {
         Console.WriteLine($"Processing event from stream: {streamEvent.StreamPointer.Stream.StreamType}");
-        
+
         // Process the event...
         await ProcessEventAsync(streamEvent.Event);
-        
+
         // Track position for resumption
-        lastPosition = streamEvent.StreamPointer.Version;
+        lastPosition = streamEvent.GlobalPosition;
     }
 }
 ```
@@ -663,11 +664,11 @@ public class OrderStatisticsProjection
             state = state.Apply(streamEvent.Event);
 
             // Save periodically (every 100 events)
-            if (streamEvent.StreamPointer.Version % 100 == 0)
+            if (streamEvent.GlobalPosition % 100 == 0)
             {
                 await _projectionStore.SaveProjectionAsync(
                     ProjectionKey,
-                    streamEvent.StreamPointer.Version,
+                    streamEvent.GlobalPosition,
                     state);
             }
         }
