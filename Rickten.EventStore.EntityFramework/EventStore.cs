@@ -158,11 +158,11 @@ public sealed class EventStore : IEventStore
             };
         }
 
-        // Load back with global positions
+        // Load back with global positions (only the newly appended events)
         var loadedEvents = await _context.Events
             .Where(e => e.StreamType == expectedVersion.Stream.StreamType
                      && e.StreamIdentifier == expectedVersion.Stream.Identifier
-                     && e.Version >= expectedVersion.Version)
+                     && e.Version > expectedVersion.Version)
             .OrderBy(e => e.Version)
             .ToListAsync(cancellationToken);
 

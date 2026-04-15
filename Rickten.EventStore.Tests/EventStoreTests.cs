@@ -241,4 +241,41 @@ public class EventStoreTests
         Assert.Equal("StreamVersion", metadata[4].Key);
         Assert.Equal("1", metadata[4].Value?.ToString()); // First event, version 1
     }
+
+    [Fact]
+    public async Task AppendAsync_ToExistingStream_ReturnsOnlyNewEvents()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var store = CreateStore(dbName);
+        var streamId = new StreamIdentifier("Order", "11");
+
+        // First append - create stream with 2 events
+        var pointer1 = new StreamPointer(streamId, 0);
+        var firstBatch = new List<AppendEvent>
+        {
+            new AppendEvent(new OrderCreatedEvent(100), null),
+            new AppendEvent(new OrderUpdatedEvent("Pending"), null)
+        };
+        var result1 = await store.AppendAsync(pointer1, firstBatch);
+        Assert.Equal(2, result1.Count);
+        Assert.Equal(1, result1[0].StreamPointer.Version);
+        Assert.Equal(2, result1[1].StreamPointer.Version);
+
+        // Second append - add 2 more events
+        var pointer2 = new StreamPointer(streamId, 2); // Current version is 2
+        var secondBatch = new List<AppendEvent>
+        {
+            new AppendEvent(new OrderUpdatedEvent("Processing"), null),
+            new AppendEvent(new OrderUpdatedEvent("Completed"), null)
+        };
+        var result2 = await store.AppendAsync(pointer2, secondBatch);
+
+        // Should return ONLY the 2 new events (versions 3 and 4), not the existing version 2
+        Assert.Equal(2, result2.Count);
+        Assert.Equal(3, result2[0].StreamPointer.Version);
+        Assert.Equal(4, result2[1].StreamPointer.Version);
+
+        // Verify no duplicate of version 2
+        Assert.DoesNotContain(result2, e => e.StreamPointer.Version == 2);
+    }
 }
