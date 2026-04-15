@@ -257,12 +257,12 @@ var pointer = new StreamPointer(streamIdentifier, version: 5);
 
 ### Stream Event
 
-Represents a persisted event with its metadata:
+Represents a persisted event with its metadata and global position:
 
 ```csharp
 public record StreamEvent(
     StreamPointer StreamPointer,
-    long GlobalPosition,
+    long GlobalPosition,              // Global ordering position across all streams
     object Event,
     IReadOnlyList<EventMetadata> Metadata
 );
@@ -463,7 +463,7 @@ public async Task ProcessAllEventsExample(IEventStore eventStore)
         // Process the event...
         await ProcessEventAsync(streamEvent.Event);
 
-        // Track position for resumption
+        // Track global position for resumption (NOT stream version)
         lastPosition = streamEvent.GlobalPosition;
     }
 }
@@ -646,12 +646,14 @@ public class OrderStatisticsProjection
         Console.WriteLine($"Rebuilding projection from position {lastPosition}");
 
         // Process all events after last position
+        long finalPosition = lastPosition;
         await foreach (var streamEvent in _eventStore.LoadAllAsync(
             fromGlobalPosition: lastPosition,
             streamTypeFilter: new[] { "Order" }))
         {
             // Update projection state
             state = state.Apply(streamEvent.Event);
+            finalPosition = streamEvent.GlobalPosition;
 
             // Save periodically (every 100 events)
             if (streamEvent.GlobalPosition % 100 == 0)
@@ -663,10 +665,10 @@ public class OrderStatisticsProjection
             }
         }
 
-        // Save final state
+        // Save final state with the actual event's global position
         await _projectionStore.SaveProjectionAsync(
             ProjectionKey,
-            state.LastProcessedPosition,
+            finalPosition,
             state);
 
         Console.WriteLine($"Projection rebuilt. Total orders: {state.TotalOrders}");
