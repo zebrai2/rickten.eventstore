@@ -16,22 +16,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ApplyEvent()` override point
   - `EnsureValid()` helper method
   - `IgnoredEvents` property for explicit opt-out
+  - `SnapshotInterval` property exposing configured snapshot interval
 - `CommandDecider<TState, TCommand>` abstract base class with:
   - `[Aggregate]` attribute requirement
   - Command and event aggregate validation
   - Helper methods: `Event()`, `NoEvents()`, `Events()`, `Require()`, `RequireEqual()`, `RequireNotNull()`
   - `CreateStreamId()` helper for stream identifier creation
   - `ValidateCommand()` and `ExecuteCommand()` override points
-- `[Aggregate]` attribute for marking implementations with aggregate name
+- `[Aggregate]` attribute for marking implementations with:
+  - Aggregate name (required)
+  - `ValidateEventCoverage` property (default: true)
+  - `SnapshotInterval` property (default: 0) for automatic snapshots
 - `[Command]` attribute for marking commands with aggregate membership
 - `StateRunner` static utilities:
   - `LoadStateAsync()` with comprehensive stream validation (gaps, ordering, duplicates)
-  - `ExecuteAsync()` for command execution with event folding
-- Comprehensive README with examples and API documentation
+  - `ExecuteAsync()` for command execution with:
+    - Event folding
+    - Optional automatic snapshot support based on `SnapshotInterval`
+    - Snapshots saved at exact intervals (e.g., 50, 100, 150)
+    - No snapshots for idempotent commands
+- Comprehensive unit tests for snapshot functionality
+- Complete README with examples and API documentation
 
 ### Design Principles
 - Clean separation between state folding (read-side) and command decision-making (write-side)
 - Strict validation by default with opt-out capability
+- Declarative snapshot configuration via `[Aggregate]` attribute
 - Helper methods to reduce boilerplate
 - Clear error messages for validation failures
 - Type-safe aggregate boundaries enforced at runtime

@@ -83,6 +83,21 @@ public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewSt
 Properties:
 - `Name` (required) - The aggregate name
 - `ValidateEventCoverage` (optional, default `true`) - Enable/disable event coverage validation
+- `SnapshotInterval` (optional, default `0`) - Automatic snapshot interval (0 = disabled)
+
+**Automatic Snapshots:**
+
+Configure automatic snapshots by setting the `SnapshotInterval`:
+
+```csharp
+[Aggregate("SessionReview", SnapshotInterval = 50)]
+public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+{
+    // Automatically snapshots every 50 events
+}
+```
+
+When `SnapshotInterval` > 0, `StateRunner.ExecuteAsync` will automatically save snapshots at the configured interval if you provide a `snapshotStore` parameter.
 
 ### [Command]
 
@@ -237,11 +252,54 @@ public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewSt
 
 ```csharp
 var eventStore = ...; // IEventStore
+var snapshotStore = ...; // ISnapshotStore (optional)
 var folder = new SessionReviewStateFolder();
 var decider = new SessionReviewCommandDecider();
 
 // Use the helper to create stream identifier
 var streamId = decider.CreateStreamId("session-1");
+
+// Execute a command (with automatic snapshots if configured)
+var command = new SessionReviewCommand.StartSession("session-1", "user-123");
+var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    command,
+    snapshotStore); // Optional: enables automatic snapshots
+
+Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
+Console.WriteLine($"Events appended: {events.Count}");
+```
+
+### 7. Automatic Snapshots
+
+Configure snapshots declaratively with the `[Aggregate]` attribute:
+
+```csharp
+[Aggregate("SessionReview", SnapshotInterval = 50)]
+public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+{
+    // ...
+}
+
+// In your code
+var (state, version, events) = await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    command,
+    snapshotStore); // Snapshot saved automatically at versions 50, 100, 150, etc.
+```
+
+**Snapshot Behavior:**
+- `SnapshotInterval = 0` (default) - No automatic snapshots
+- `SnapshotInterval > 0` - Snapshots saved every N events
+- Snapshots only saved when `snapshotStore` parameter is provided
+- Idempotent commands (no events) don't trigger snapshots
+- Exposed via `StateFolder<TState>.SnapshotInterval` property
 
 // Execute a command
 var command = new SessionReviewCommand.StartSession("session-1", "user-123");

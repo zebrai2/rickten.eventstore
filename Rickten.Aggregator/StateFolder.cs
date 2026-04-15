@@ -18,7 +18,7 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
                 $"Add [Aggregate(\"YourAggregateName\")] to your class.");
 
         var allEvents = ScanEventsForAggregate(attr.Name);
-        return new AggregateInfo(attr.Name, attr.ValidateEventCoverage, allEvents);
+        return new AggregateInfo(attr.Name, attr.ValidateEventCoverage, attr.SnapshotInterval, allEvents);
     });
 
     /// <summary>
@@ -26,6 +26,12 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
     /// Events listed here will not trigger validation errors when unhandled.
     /// </summary>
     protected virtual ISet<Type> IgnoredEvents => new HashSet<Type>();
+
+    /// <summary>
+    /// Gets the snapshot interval for this aggregate from the [Aggregate] attribute.
+    /// Returns 0 if no automatic snapshots are configured.
+    /// </summary>
+    public int SnapshotInterval => _aggregateInfo.Value.SnapshotInterval;
 
     protected StateFolder()
     {
@@ -159,5 +165,5 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
         }
     }
 
-    private record AggregateInfo(string AggregateName, bool ValidateEventCoverage, HashSet<Type> AllEvents);
+    private record AggregateInfo(string AggregateName, bool ValidateEventCoverage, int SnapshotInterval, HashSet<Type> AllEvents);
 }

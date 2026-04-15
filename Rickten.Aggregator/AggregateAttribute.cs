@@ -18,4 +18,11 @@ public sealed class AggregateAttribute(string name) : Attribute
     /// Default is true (strict mode). Set to false to disable validation.
     /// </summary>
     public bool ValidateEventCoverage { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the snapshot interval for this aggregate.
+    /// When > 0, StateRunner will automatically save snapshots every N events.
+    /// Default is 0 (no automatic snapshots).
+    /// </summary>
+    public int SnapshotInterval { get; init; } = 0;
 }

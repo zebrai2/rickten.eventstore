@@ -74,6 +74,7 @@ public static class StateRunner
 
     /// <summary>
     /// Executes a command and returns events to append.
+    /// If the folder has SnapshotInterval > 0, automatically saves snapshots at the configured interval.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <typeparam name="TCommand">The command type.</typeparam>
@@ -82,6 +83,7 @@ public static class StateRunner
     /// <param name="decider">The command decider.</param>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
+    /// <param name="snapshotStore">Optional snapshot store for automatic snapshots.</param>
     /// <param name="metadata">Optional metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, version, and appended events.</returns>
@@ -91,6 +93,7 @@ public static class StateRunner
         ICommandDecider<TState, TCommand> decider,
         StreamIdentifier streamIdentifier,
         TCommand command,
+        ISnapshotStore? snapshotStore = null,
         IReadOnlyList<AppendMetadata>? metadata = null,
         CancellationToken cancellationToken = default)
     {
@@ -120,6 +123,17 @@ public static class StateRunner
         }
 
         var newVersion = appendedEvents.Last().StreamPointer.Version;
+
+        // Auto-snapshot if configured
+        if (snapshotStore != null && folder is StateFolder<TState> stateFolder)
+        {
+            var snapshotInterval = stateFolder.SnapshotInterval;
+            if (snapshotInterval > 0 && newVersion % snapshotInterval == 0)
+            {
+                var snapshotPointer = new StreamPointer(streamIdentifier, newVersion);
+                await snapshotStore.SaveSnapshotAsync(snapshotPointer, newState!, cancellationToken);
+            }
+        }
 
         return (newState, newVersion, appendedEvents);
     }
