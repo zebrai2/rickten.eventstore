@@ -8,7 +8,7 @@ A lightweight, flexible **Event Sourcing** library for .NET with Entity Framewor
 
 ## 📦 Packages
 
-This repository contains three NuGet packages:
+This repository contains four NuGet packages:
 
 ### **Rickten.EventStore**
 Core event sourcing abstractions and contracts. Provides `IEventStore`, `ISnapshotStore`, and `IProjectionStore` interfaces.
@@ -25,13 +25,22 @@ dotnet add package Rickten.EventStore.EntityFramework
 ```
 
 ### **Rickten.Aggregator**
-Lightweight library for implementing event-sourced aggregates with clean separation between state folding and command decision-making. Features strict-by-default validation.
+Lightweight library for implementing event-sourced aggregates (write-side) with clean separation between state folding and command decision-making. Features strict-by-default validation and declarative snapshot configuration.
 
 ```bash
 dotnet add package Rickten.Aggregator
 ```
 
 [📖 Read the Aggregator documentation →](Rickten.Aggregator/README.md)
+
+### **Rickten.Projector**
+Lightweight library for building event-sourced projections (read-side/read models) with declarative filtering and checkpoint management.
+
+```bash
+dotnet add package Rickten.Projector
+```
+
+[📖 Read the Projector documentation →](Rickten.Projector/README.md)
 
 ## 📋 Table of Contents
 
