@@ -328,12 +328,14 @@ Represents an event that has been persisted to a stream.
 ```csharp
 public sealed record StreamEvent(
     StreamPointer StreamPointer,
+    long GlobalPosition,
     object Event,
     IReadOnlyList<EventMetadata> Metadata);
 ```
 
 **Properties:**
 - `StreamPointer` (StreamPointer): The stream pointer indicating the stream and version
+- `GlobalPosition` (long): The global position of this event across all streams
 - `Event` (object): The event data
 - `Metadata` (IReadOnlyList<EventMetadata>): The source-tracked metadata
 

@@ -69,6 +69,7 @@ All data types are immutable records:
 ```csharp
 public sealed record StreamEvent(
     StreamPointer StreamPointer,
+    long GlobalPosition,
     object Event,
     IReadOnlyList<EventMetadata> Metadata);
 ```

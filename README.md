@@ -329,17 +329,7 @@ var events = new[]
 
 **Security Benefit:** Clients cannot spoof system metadata because they only provide `AppendMetadata` (no Source field).
 
-### Stream Event
-
-Represents a persisted event with its metadata:
-
-```csharp
-public record StreamEvent(
-    StreamPointer StreamPointer,
-    object Event,
-    IReadOnlyList<EventMetadata> Metadata  // Contains Source-tracked metadata
-);
-```
+## 🔌 Dependency Injection Setup
 
 ### Simple Setup: All Stores Together
 
