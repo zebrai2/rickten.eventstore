@@ -31,10 +31,11 @@ public interface ICommandDecider<TState, TCommand>
 
 **StateFolder<TState>** - Abstract base class that:
 - **Requires `[Aggregate]` attribute** for validation
-- Validates event coverage by default (opt-out with `ValidateEventCoverage = false`)
-- Handles null event checks
-- Provides clean `ApplyEvent(state, event)` method to override
+- **Uses explicit handler methods**: Define `protected TState When(EventType e, TState state)` for each event
+- **Validates event coverage by default**: Ensures all events have handlers (opt-out with `ValidateEventCoverage = false`)
+- Handles null event checks automatically
 - Offers `EnsureValid(condition, message)` helper for state validation
+- Provides `IgnoredEvents` property to exclude specific events from validation
 
 **CommandDecider<TState, TCommand>** - Abstract base class that:
 - **Requires `[Aggregate]` attribute** for validation
@@ -167,29 +168,36 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
         Status = SessionStatus.NotStarted 
     };
 
-    protected override SessionReviewState ApplyEvent(SessionReviewState state, object @event)
+    // Define explicit handler for each event type
+    protected SessionReviewState When(SessionReviewEvent.SessionStarted started, SessionReviewState state)
     {
-        return @event switch
+        return state with
         {
-            SessionReviewEvent.SessionStarted started => state with
-            {
-                SessionId = started.SessionId,
-                UserId = started.UserId,
-                Status = SessionStatus.Active
-            },
-            SessionReviewEvent.InteractionRecorded interaction => state with
-            {
-                Interactions = [.. state.Interactions, new Interaction(
-                    interaction.InteractionId,
-                    interaction.Type,
-                    interaction.Content,
-                    interaction.RecordedAt)]
-            },
-            _ => state
+            SessionId = started.SessionId,
+            UserId = started.UserId,
+            Status = SessionStatus.Active
+        };
+    }
+
+    protected SessionReviewState When(SessionReviewEvent.InteractionRecorded interaction, SessionReviewState state)
+    {
+        return state with
+        {
+            Interactions = [.. state.Interactions, new Interaction(
+                interaction.InteractionId,
+                interaction.Type,
+                interaction.Content,
+                interaction.RecordedAt)]
         };
     }
 }
 ```
+
+**Event Handler Convention:**
+- Method name must be `When`
+- Signature: `protected TState When(EventType e, TState state)`
+- One method per event type
+- Validation at construction ensures all events are handled
 
 ### 5. Implement Command Decider (Using Base Class with Helpers)
 
@@ -330,11 +338,11 @@ Console.WriteLine($"Events appended: {events.Count}");
    - Exception = business rule violation
    - Base classes handle common patterns
 
-3. **Strict Validation by Default**
+3. **Validation**
    - `[Aggregate]` attribute required on implementations
    - Commands validated against aggregate (via `[Command]` attribute)
    - Events validated against aggregate (via `[Event]` attribute)
-   - Event coverage validation enabled by default (opt-out available)
+   - Event coverage validated at construction: all events must have `When()` handlers
    - Clear error messages guide developers
 
 4. **Type Safety**
@@ -367,7 +375,8 @@ Console.WriteLine($"Events appended: {events.Count}");
 - `EnsureValid(bool condition, string message)` - Throws if state transition is invalid
 
 **Properties:**
-- `IgnoredEvents` - Override to list event types that should be ignored in coverage validation
+- `IgnoredEvents` - Override to list event types excluded from coverage validation
+- `SnapshotInterval` - Gets the configured snapshot interval from `[Aggregate]` attribute
 
 ## Error Handling
 

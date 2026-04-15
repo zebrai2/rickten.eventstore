@@ -185,13 +185,9 @@ public class TestStateFolder : StateFolder<TestState>
 {
     public override TestState InitialState() => new(0);
 
-    protected override TestState ApplyEvent(TestState state, object @event)
+    protected TestState When(TestIncremented e, TestState state)
     {
-        return @event switch
-        {
-            TestIncremented => state with { Count = state.Count + 1 },
-            _ => state
-        };
+        return state with { Count = state.Count + 1 };
     }
 }
 
@@ -225,13 +221,9 @@ public class NoSnapshotStateFolder : StateFolder<NoSnapshotState>
 {
     public override NoSnapshotState InitialState() => new(0);
 
-    protected override NoSnapshotState ApplyEvent(NoSnapshotState state, object @event)
+    protected NoSnapshotState When(NoSnapshotIncremented e, NoSnapshotState state)
     {
-        return @event switch
-        {
-            NoSnapshotIncremented => state with { Count = state.Count + 1 },
-            _ => state
-        };
+        return state with { Count = state.Count + 1 };
     }
 }
 
