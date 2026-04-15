@@ -17,8 +17,8 @@
     <Description>A lightweight, flexible Event Sourcing library for .NET with built-in support for events, snapshots, and projections. Provides core abstractions for implementing event sourcing patterns in your applications.</Description>
     <Copyright>Copyright (c) 2025 Rickten</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/rickten/rickten.eventstore</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/rickten/rickten.eventstore</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/zebrai2/rickten.eventstore</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/zebrai2/rickten.eventstore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>event-sourcing;cqrs;ddd;domain-driven-design;event-store;snapshots;projections;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
