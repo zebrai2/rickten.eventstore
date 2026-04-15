@@ -98,7 +98,11 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 }
 ```
 
-When `SnapshotInterval` > 0, `StateRunner.ExecuteAsync` will automatically save snapshots at the configured interval if you provide a `snapshotStore` parameter.
+When `SnapshotInterval` > 0:
+- `StateRunner.ExecuteAsync` automatically saves snapshots at the configured interval when you provide a `snapshotStore`
+- `StateRunner.LoadStateAsync` automatically loads from the latest snapshot when you provide a `snapshotStore`, reducing event replay
+
+This provides a complete optimization path for aggregates with long event histories.
 
 ### [Command]
 

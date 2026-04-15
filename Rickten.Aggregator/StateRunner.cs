@@ -9,11 +9,13 @@ public static class StateRunner
 {
     /// <summary>
     /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
+    /// If a snapshot store is provided, starts from the latest snapshot to optimize loading.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <param name="eventStore">The event store.</param>
     /// <param name="folder">The state folder.</param>
     /// <param name="streamIdentifier">The stream to load.</param>
+    /// <param name="snapshotStore">Optional snapshot store to load from a snapshot.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The current state and version.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
@@ -21,12 +23,40 @@ public static class StateRunner
         IEventStore eventStore,
         IStateFolder<TState> folder,
         StreamIdentifier streamIdentifier,
+        ISnapshotStore? snapshotStore = null,
         CancellationToken cancellationToken = default)
     {
-        var state = folder.InitialState();
-        long version = 0;
-        long expectedVersion = 1;
-        var pointer = new StreamPointer(streamIdentifier, 0);
+        TState state;
+        long version;
+        long expectedVersion;
+
+        // Try to load from snapshot first
+        if (snapshotStore != null)
+        {
+            var snapshot = await snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken);
+            if (snapshot != null && snapshot.State is TState snapshotState)
+            {
+                state = snapshotState;
+                version = snapshot.StreamPointer.Version;
+                expectedVersion = version + 1;
+            }
+            else
+            {
+                // No snapshot found, start from beginning
+                state = folder.InitialState();
+                version = 0;
+                expectedVersion = 1;
+            }
+        }
+        else
+        {
+            // No snapshot store provided, start from beginning
+            state = folder.InitialState();
+            version = 0;
+            expectedVersion = 1;
+        }
+
+        var pointer = new StreamPointer(streamIdentifier, version);
 
         await foreach (var streamEvent in eventStore.LoadAsync(pointer, cancellationToken))
         {
@@ -97,8 +127,8 @@ public static class StateRunner
         IReadOnlyList<AppendMetadata>? metadata = null,
         CancellationToken cancellationToken = default)
     {
-        // Load current state
-        var (state, currentVersion) = await LoadStateAsync(eventStore, folder, streamIdentifier, cancellationToken);
+        // Load current state (with snapshot optimization if available)
+        var (state, currentVersion) = await LoadStateAsync(eventStore, folder, streamIdentifier, snapshotStore, cancellationToken);
 
         // Execute command to get events
         var events = decider.Execute(state, command);

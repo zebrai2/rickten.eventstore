@@ -30,7 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SnapshotInterval` property (default: 0) for automatic snapshots
 - `[Command]` attribute for marking commands with aggregate membership
 - `StateRunner` static utilities:
-  - `LoadStateAsync()` with comprehensive stream validation (gaps, ordering, duplicates)
+  - `LoadStateAsync()` with:
+    - Comprehensive stream validation (gaps, ordering, duplicates)
+    - Optional snapshot optimization (loads from latest snapshot when provided)
   - `ExecuteAsync()` for command execution with:
     - Event folding
     - Optional automatic snapshot support based on `SnapshotInterval`

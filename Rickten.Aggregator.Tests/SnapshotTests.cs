@@ -166,6 +166,79 @@ public class SnapshotTests
         var snapshotAfter = await snapshotStore.LoadSnapshotAsync(streamId);
         Assert.Equal(snapshotBefore.StreamPointer.Version, snapshotAfter.StreamPointer.Version);
     }
+
+    [Fact]
+    public async Task LoadStateAsync_WithSnapshot_StartsFromSnapshot()
+    {
+        var eventStore = new InMemoryEventStore();
+        var snapshotStore = new InMemorySnapshotStore();
+        var folder = new TestStateFolder();
+        var decider = new TestCommandDecider();
+        var streamId = new StreamIdentifier("Test", "1");
+
+        // Create 50 events (will snapshot at 25 and 50)
+        for (int i = 0; i < 50; i++)
+        {
+            await StateRunner.ExecuteAsync(
+                eventStore,
+                folder,
+                decider,
+                streamId,
+                new TestCommand.Increment(),
+                snapshotStore);
+        }
+
+        // Add 10 more events after the snapshot
+        for (int i = 0; i < 10; i++)
+        {
+            await StateRunner.ExecuteAsync(
+                eventStore,
+                folder,
+                decider,
+                streamId,
+                new TestCommand.Increment(),
+                snapshotStore);
+        }
+
+        // Load state with snapshot - should start from version 50 snapshot
+        var (state, version) = await StateRunner.LoadStateAsync(
+            eventStore,
+            folder,
+            streamId,
+            snapshotStore);
+
+        Assert.Equal(60, state.Count);
+        Assert.Equal(60, version);
+    }
+
+    [Fact]
+    public async Task LoadStateAsync_WithoutSnapshot_LoadsFromBeginning()
+    {
+        var eventStore = new InMemoryEventStore();
+        var folder = new TestStateFolder();
+        var decider = new TestCommandDecider();
+        var streamId = new StreamIdentifier("Test", "1");
+
+        // Create 30 events
+        for (int i = 0; i < 30; i++)
+        {
+            await StateRunner.ExecuteAsync(
+                eventStore,
+                folder,
+                decider,
+                streamId,
+                new TestCommand.Increment());
+        }
+
+        // Load state without snapshot store - should load all events
+        var (state, version) = await StateRunner.LoadStateAsync(
+            eventStore,
+            folder,
+            streamId);
+
+        Assert.Equal(30, state.Count);
+        Assert.Equal(30, version);
+    }
 }
 
 // Test domain
