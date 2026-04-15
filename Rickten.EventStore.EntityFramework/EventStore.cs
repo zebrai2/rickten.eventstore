@@ -29,7 +29,7 @@ public sealed class EventStore : IEventStore
         var events = _context.Events
             .Where(e => e.StreamType == fromVersion.Stream.StreamType
                      && e.StreamIdentifier == fromVersion.Stream.Identifier
-                     && e.Version >= fromVersion.Version)
+                     && e.Version > fromVersion.Version)
             .OrderBy(e => e.Version)
             .AsAsyncEnumerable();
 

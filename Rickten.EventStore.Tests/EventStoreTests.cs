@@ -278,4 +278,40 @@ public class EventStoreTests
         // Verify no duplicate of version 2
         Assert.DoesNotContain(result2, e => e.StreamPointer.Version == 2);
     }
+
+    [Fact]
+    public async Task LoadAsync_FromMidStream_DoesNotReplayPreviousVersion()
+    {
+        // This test verifies the off-by-one bug fix in snapshot replay
+        var dbName = Guid.NewGuid().ToString();
+        var store = CreateStore(dbName);
+        var streamId = new StreamIdentifier("Order", "12");
+
+        // Create a stream with 5 events
+        var pointer = new StreamPointer(streamId, 0);
+        var events = new List<AppendEvent>
+        {
+            new AppendEvent(new OrderCreatedEvent(100), null),
+            new AppendEvent(new OrderUpdatedEvent("Pending"), null),
+            new AppendEvent(new OrderUpdatedEvent("Processing"), null),
+            new AppendEvent(new OrderUpdatedEvent("Shipped"), null),
+            new AppendEvent(new OrderUpdatedEvent("Delivered"), null)
+        };
+        await store.AppendAsync(pointer, events);
+
+        // Load from version 3 (simulating a snapshot at version 3)
+        // Should load versions 4 and 5 only, NOT version 3
+        var loaded = new List<StreamEvent>();
+        await foreach (var e in store.LoadAsync(new StreamPointer(streamId, 3)))
+            loaded.Add(e);
+
+        // Should load exactly 2 events (versions 4 and 5)
+        Assert.Equal(2, loaded.Count);
+        Assert.Equal(4, loaded[0].StreamPointer.Version);
+        Assert.Equal(5, loaded[1].StreamPointer.Version);
+
+        // Verify version 3 is NOT included (this would be the bug)
+        Assert.DoesNotContain(loaded, e => e.StreamPointer.Version == 3);
+    }
 }
+

@@ -432,7 +432,7 @@ public async Task AppendEventsExample(IEventStore eventStore)
 public async Task<List<object>> LoadStreamExample(IEventStore eventStore)
 {
     var streamId = new StreamIdentifier("Order", "order-123");
-    var pointer = new StreamPointer(streamId, version: 0); // Load from beginning
+    var pointer = new StreamPointer(streamId, version: 0); // Load all events (version > 0)
 
     var events = new List<object>();
 
@@ -440,13 +440,16 @@ public async Task<List<object>> LoadStreamExample(IEventStore eventStore)
     {
         Console.WriteLine($"Event at version {streamEvent.StreamPointer.Version}");
         Console.WriteLine($"Event type: {streamEvent.Event.GetType().Name}");
-        
+
         events.Add(streamEvent.Event);
     }
 
     return events;
 }
 ```
+
+**Note:** `LoadAsync` loads events exclusively - a pointer with version N loads events with version > N.
+
 
 ### Loading All Events (Event Store Pattern)
 

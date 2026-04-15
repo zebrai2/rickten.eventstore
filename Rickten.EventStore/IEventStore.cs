@@ -6,9 +6,11 @@ namespace Rickten.EventStore;
 public interface IEventStore
 {
     /// <summary>
-    /// Loads events from a specific stream starting from the specified version.
+    /// Loads events from a specific stream starting after the specified version.
+    /// Events are loaded exclusively - if fromVersion.Version is N, events with version &gt; N are returned.
+    /// To load all events from the beginning, pass a StreamPointer with version 0.
     /// </summary>
-    /// <param name="fromVersion">The stream pointer indicating where to start loading events.</param>
+    /// <param name="fromVersion">The stream pointer indicating the version to start loading after (exclusive).</param>
     /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
     /// <returns>An async enumerable of stream events.</returns>
     IAsyncEnumerable<StreamEvent> LoadAsync(

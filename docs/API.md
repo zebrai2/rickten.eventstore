@@ -55,10 +55,12 @@ public interface IEventStore
 
 #### LoadAsync
 
-Loads events from a specific stream starting from the specified version.
+Loads events from a specific stream starting **after** the specified version.
+
+**Behavior:** Events are loaded exclusively - if `fromVersion.Version` is N, only events with version > N are returned.
 
 **Parameters:**
-- `fromVersion` (StreamPointer): The stream pointer indicating where to start loading events
+- `fromVersion` (StreamPointer): The stream pointer indicating the version to start loading after (exclusive)
 - `cancellationToken` (CancellationToken): Optional cancellation token
 
 **Returns:** `IAsyncEnumerable<StreamEvent>` - Stream of events
@@ -66,13 +68,16 @@ Loads events from a specific stream starting from the specified version.
 **Example:**
 ```csharp
 var streamId = new StreamIdentifier("Order", "order-123");
-var pointer = new StreamPointer(streamId, version: 0);
+var pointer = new StreamPointer(streamId, version: 0); // Load all events (version > 0)
 
 await foreach (var streamEvent in eventStore.LoadAsync(pointer))
 {
     Console.WriteLine($"Event at version {streamEvent.StreamPointer.Version}");
 }
 ```
+
+**Note:** To load from the beginning, use `version: 0`. To resume after a snapshot at version N, use `version: N` to load events starting from version N+1.
+
 
 #### LoadAllAsync
 

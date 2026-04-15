@@ -133,36 +133,39 @@ Dramatically reduce read times for large aggregates:
 public async Task<OrderState> LoadOrderAsync(string orderId)
 {
     var streamId = new StreamIdentifier("Order", orderId);
-    
+
     // Try to load snapshot first
     var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
-    
+
     OrderState state;
-    long fromVersion;
-    
+    long version;
+
     if (snapshot != null)
     {
         state = (OrderState)snapshot.State;
-        fromVersion = snapshot.StreamPointer.Version;
+        version = snapshot.StreamPointer.Version; // Snapshot represents state at this version
     }
     else
     {
         state = new OrderState();
-        fromVersion = 0;
+        version = 0; // No snapshot, start from beginning
     }
-    
-    // Only load events after snapshot
-    var pointer = new StreamPointer(streamId, fromVersion);
+
+    // LoadAsync loads events AFTER the specified version (exclusive)
+    // So using version N will load events starting from N+1
+    var pointer = new StreamPointer(streamId, version);
     await foreach (var e in eventStore.LoadAsync(pointer))
     {
         state = state.Apply(e.Event);
     }
-    
+
     return state;
 }
 ```
 
 **Performance:** Without snapshot: O(n), With snapshot: O(k) where k << n
+
+**Note:** For production use, prefer `StateRunner.LoadStateAsync` which handles this pattern correctly with proper validation.
 
 ### Snapshot Frequency
 
