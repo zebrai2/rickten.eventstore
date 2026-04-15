@@ -139,9 +139,8 @@ public static class StateRunner
             return (state, currentVersion, []);
         }
 
-        // Append events to store
-        var expectedVersion = currentVersion == 0 ? 0 : currentVersion + 1;
-        var pointer = new StreamPointer(streamIdentifier, expectedVersion);
+        // Append events to store with current version
+        var pointer = new StreamPointer(streamIdentifier, currentVersion);
         var appendEvents = events.Select(e => new AppendEvent(e, metadata)).ToList();
         var appendedEvents = await eventStore.AppendAsync(pointer, appendEvents, cancellationToken);
 

@@ -47,6 +47,7 @@ internal class InMemoryEventStore : IEventStore
         var streamId = expectedVersion.Stream;
         var currentVersion = _streamVersions.GetValueOrDefault(streamId, 0);
 
+        // Validate optimistic concurrency - expectedVersion should match current stream version
         if (currentVersion != expectedVersion.Version)
         {
             throw new StreamVersionConflictException($"Version conflict on stream {streamId}")

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Version semantics inconsistency**: Standardized `StreamPointer.Version` to consistently represent the current/last written stream version across all implementations. Previously, the documentation stated that `expectedVersion` should be the current version, but the EF implementation expected `currentVersion + 1`. Now all code and documentation agree: pass the current stream version (e.g., version 5 if stream has 5 events), and new events write at version + 1.
+
 ### Planned
 - Azure Blob Storage snapshot provider
 - Redis projection store provider

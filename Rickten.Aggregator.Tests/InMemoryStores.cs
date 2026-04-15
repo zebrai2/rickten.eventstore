@@ -25,15 +25,20 @@ public class InMemoryEventStore : IEventStore
 
             var stream = _streams[key];
             var expectedVersion = pointer.Version;
+            var currentVersion = stream.Count;
 
-            // Validate optimistic concurrency
-            if (expectedVersion != 0 && stream.Count + 1 != expectedVersion)
+            // Validate optimistic concurrency - expectedVersion should match current stream version
+            if (currentVersion != expectedVersion)
             {
-                throw new InvalidOperationException("Concurrency conflict");
+                throw new StreamVersionConflictException("Concurrency conflict")
+                {
+                    ExpectedVersion = pointer,
+                    ActualVersion = new StreamPointer(pointer.Stream, currentVersion)
+                };
             }
 
             var appended = new List<StreamEvent>();
-            var version = stream.Count;
+            var version = currentVersion;
 
             foreach (var appendEvent in events)
             {

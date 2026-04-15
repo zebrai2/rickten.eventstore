@@ -80,25 +80,25 @@ public sealed class EventStore : IEventStore
             return Array.Empty<StreamEvent>();
         }
 
-        // Check current version
+        // Check current version (0 means new stream, no events written yet)
         var currentVersion = await _context.Events
             .Where(e => e.StreamType == expectedVersion.Stream.StreamType
                      && e.StreamIdentifier == expectedVersion.Stream.Identifier)
-            .MaxAsync(e => (long?)e.Version, cancellationToken) ?? -1;
+            .MaxAsync(e => (long?)e.Version, cancellationToken) ?? 0;
 
-        if (currentVersion != expectedVersion.Version - 1)
+        if (currentVersion != expectedVersion.Version)
         {
             throw new StreamVersionConflictException(
-                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}. Expected {expectedVersion.Version}, actual {currentVersion + 1}")
+                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}. Expected {expectedVersion.Version}, actual {currentVersion}")
             {
                 ExpectedVersion = expectedVersion,
-                ActualVersion = new StreamPointer(expectedVersion.Stream, currentVersion + 1)
+                ActualVersion = new StreamPointer(expectedVersion.Stream, currentVersion)
             };
         }
 
         var appendedEvents = new List<StreamEvent>();
-        // Events are 1-indexed; version 0 in expectedVersion indicates a new stream
-        var version = expectedVersion.Version == 0 ? 1 : expectedVersion.Version;
+        // Events are 1-indexed; start from currentVersion + 1
+        var version = currentVersion + 1;
 
         foreach (var appendEvent in events)
         {

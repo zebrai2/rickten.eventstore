@@ -32,7 +32,12 @@ public interface IEventStore
     /// <summary>
     /// Appends events to a stream with optimistic concurrency control.
     /// </summary>
-    /// <param name="expectedVersion">The expected stream version for optimistic concurrency. Use version 0 for new streams.</param>
+    /// <param name="expectedVersion">
+    /// The expected current stream version for optimistic concurrency. 
+    /// Version 0 indicates a new stream (no events written yet).
+    /// If the stream has 5 events, pass version 5 to append after the last event.
+    /// The new events will be written starting at version + 1.
+    /// </param>
     /// <param name="events">The events to append to the stream.</param>
     /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
     /// <returns>The appended events with their assigned stream pointers and global positions.</returns>

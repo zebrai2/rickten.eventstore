@@ -102,7 +102,7 @@ await foreach (var streamEvent in eventStore.LoadAllAsync(
 Appends events to a stream with optimistic concurrency control.
 
 **Parameters:**
-- `expectedVersion` (StreamPointer): The expected stream version for optimistic concurrency. Use version 0 for new streams
+- `expectedVersion` (StreamPointer): The expected **current stream version** for optimistic concurrency. Version 0 for new streams (no events written yet). If the stream has 5 events, pass version 5 to append after the last event. The new events will be written starting at version + 1.
 - `events` (IReadOnlyList<AppendEvent>): The events to append to the stream
 - `cancellationToken` (CancellationToken): Optional cancellation token
 
@@ -126,6 +126,12 @@ var events = new[]
 
 var result = await eventStore.AppendAsync(pointer, events);
 // result[0].StreamPointer.Version == 1
+
+// To append more events, pass the current version
+var moreEvents = new[] { new AppendEvent(new OrderShippedEvent("tracking-123")) };
+var pointer2 = new StreamPointer(streamId, version: 1); // Stream now has 1 event
+var result2 = await eventStore.AppendAsync(pointer2, moreEvents);
+// result2[0].StreamPointer.Version == 2
 ```
 
 ---
@@ -295,7 +301,7 @@ public sealed record StreamPointer(
 
 **Properties:**
 - `Stream` (StreamIdentifier): The stream identifier
-- `Version` (long): The version number within the stream. Version 0 indicates a new stream
+- `Version` (long): The current stream version (last written event version). Version 0 indicates a new stream with no events. Version N means the stream has N events, and the next append will write version N+1.
 
 **Example:**
 ```csharp
