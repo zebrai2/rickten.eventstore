@@ -41,7 +41,7 @@ public class ServiceCollectionExtensionsTests
     public void AddEventStore_RegistersWithScopedLifetime()
     {
         var services = new ServiceCollection();
-        
+
         services.AddEventStore(options =>
         {
             options.UseInMemoryDatabase("TestDb");
@@ -60,24 +60,20 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStore_WithCustomLifetime_RegistersCorrectly()
+    public void AddEventStore_CalledMultipleTimes_DoesNotRegisterDuplicates()
     {
         var services = new ServiceCollection();
-        
-        services.AddEventStore(
-            options => options.UseInMemoryDatabase("TestDb"),
-            ServiceLifetime.Transient);
 
-        var eventStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEventStore));
-        var snapshotStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISnapshotStore));
-        var projectionStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IProjectionStore));
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb1"));
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb2"));
 
-        Assert.NotNull(eventStoreDescriptor);
-        Assert.NotNull(snapshotStoreDescriptor);
-        Assert.NotNull(projectionStoreDescriptor);
-        Assert.Equal(ServiceLifetime.Transient, eventStoreDescriptor.Lifetime);
-        Assert.Equal(ServiceLifetime.Transient, snapshotStoreDescriptor.Lifetime);
-        Assert.Equal(ServiceLifetime.Transient, projectionStoreDescriptor.Lifetime);
+        var eventStoreDescriptors = services.Where(d => d.ServiceType == typeof(IEventStore)).ToList();
+        var snapshotStoreDescriptors = services.Where(d => d.ServiceType == typeof(ISnapshotStore)).ToList();
+        var projectionStoreDescriptors = services.Where(d => d.ServiceType == typeof(IProjectionStore)).ToList();
+
+        Assert.Single(eventStoreDescriptors);
+        Assert.Single(snapshotStoreDescriptors);
+        Assert.Single(projectionStoreDescriptors);
     }
 
     [Fact]
@@ -182,138 +178,7 @@ public class ServiceCollectionExtensionsTests
         });
     }
 
-    [Fact]
-    public void AddEventStoreOnly_RegistersOnlyEventStore()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("EventsDb");
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
-        var projectionStore = serviceProvider.GetService<IProjectionStore>();
-
-        Assert.NotNull(eventStore);
-        Assert.Null(snapshotStore);
-        Assert.Null(projectionStore);
-    }
-
-    [Fact]
-    public void AddSnapshotStoreOnly_RegistersOnlySnapshotStore()
-    {
-        var services = new ServiceCollection();
-
-        services.AddSnapshotStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("SnapshotsDb");
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
-        var projectionStore = serviceProvider.GetService<IProjectionStore>();
-
-        Assert.Null(eventStore);
-        Assert.NotNull(snapshotStore);
-        Assert.Null(projectionStore);
-    }
-
-    [Fact]
-    public void AddProjectionStoreOnly_RegistersOnlyProjectionStore()
-    {
-        var services = new ServiceCollection();
-
-        services.AddProjectionStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("ProjectionsDb");
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
-        var projectionStore = serviceProvider.GetService<IProjectionStore>();
-
-        Assert.Null(eventStore);
-        Assert.Null(snapshotStore);
-        Assert.NotNull(projectionStore);
-    }
-
-    [Fact]
-    public void AddStoresSeparately_AllowsDifferentConfigurations()
-    {
-        var services = new ServiceCollection();
-
-        // Register each store with different database
-        services.AddEventStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("EventsDb");
-        });
-
-        services.AddSnapshotStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("SnapshotsDb");
-        });
-
-        services.AddProjectionStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase("ProjectionsDb");
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
-        var projectionStore = serviceProvider.GetService<IProjectionStore>();
-
-        Assert.NotNull(eventStore);
-        Assert.NotNull(snapshotStore);
-        Assert.NotNull(projectionStore);
-    }
-
-    [Fact]
-    public async Task AddStoresSeparately_WorksCorrectly()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreOnly(options =>
-        {
-            options.UseInMemoryDatabase(Guid.NewGuid().ToString());
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        using var scope = serviceProvider.CreateScope();
-        var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-
-        var pointer = new StreamPointer(new StreamIdentifier("Order", "1"), 0);
-        var appendEvent = new AppendEvent(new OrderCreatedEvent(100), null);
-
-        var result = await eventStore.AppendAsync(pointer, new[] { appendEvent });
-
-        Assert.Single(result);
-        Assert.Equal(1, result[0].StreamPointer.Version);
-    }
-
-    [Fact]
-    public void AddEventStoreOnly_WithTransientLifetime_RegistersCorrectly()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreOnly(
-            options => options.UseInMemoryDatabase("TestDb"),
-            ServiceLifetime.Transient);
-
-        var eventStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEventStore));
-
-        Assert.NotNull(eventStoreDescriptor);
-        Assert.Equal(ServiceLifetime.Transient, eventStoreDescriptor.Lifetime);
-    }
+    [Event("Order", "order-created", 1)]
+    public record OrderCreatedEvent(decimal Amount);
 }
 
