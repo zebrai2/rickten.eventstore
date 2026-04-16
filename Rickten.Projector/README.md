@@ -163,16 +163,16 @@ Static utility methods for projection operations:
 
 **`RebuildAsync`** - Rebuild projection from scratch:
 ```csharp
-public static Task<(TView View, long LastVersion)> RebuildAsync<TView>(
+public static Task<(TView View, long LastGlobalPosition)> RebuildAsync<TView>(
     IEventStore eventStore,
     IProjection<TView> projection,
-    long fromVersion = 0,
+    long fromGlobalPosition = 0,
     CancellationToken cancellationToken = default);
 ```
 
 **`CatchUpAsync`** - Automatic checkpoint management:
 ```csharp
-public static Task<(TView View, long Version)> CatchUpAsync<TView>(
+public static Task<(TView View, long GlobalPosition)> CatchUpAsync<TView>(
     IEventStore eventStore,
     IProjectionStore projectionStore,
     IProjection<TView> projection,

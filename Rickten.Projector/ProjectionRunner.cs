@@ -8,23 +8,23 @@ namespace Rickten.Projector;
 public static class ProjectionRunner
 {
     /// <summary>
-    /// Rebuilds a projection from scratch starting at a specific version.
+    /// Rebuilds a projection from scratch starting at a specific global position.
     /// Does not save checkpoints - caller is responsible for persistence.
     /// </summary>
     /// <typeparam name="TView">The view type.</typeparam>
     /// <param name="eventStore">The event store to load events from.</param>
     /// <param name="projection">The projection to apply.</param>
-    /// <param name="fromVersion">The version to start from (default: 0 = beginning).</param>
+    /// <param name="fromGlobalPosition">The global position to start from (default: 0 = beginning).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The projected view and the last processed version.</returns>
-    public static async Task<(TView View, long LastVersion)> RebuildAsync<TView>(
+    /// <returns>The projected view and the last processed global position.</returns>
+    public static async Task<(TView View, long LastGlobalPosition)> RebuildAsync<TView>(
         IEventStore eventStore,
         IProjection<TView> projection,
-        long fromVersion = 0,
+        long fromGlobalPosition = 0,
         CancellationToken cancellationToken = default)
     {
         var view = projection.InitialView();
-        long lastVersion = fromVersion;
+        long lastGlobalPosition = fromGlobalPosition;
 
         // Get filters from projection if it's a Projection<T>
         string[]? aggregateFilter = null;
@@ -38,16 +38,16 @@ public static class ProjectionRunner
 
         // Load events with optional filtering
         await foreach (var streamEvent in eventStore.LoadAllAsync(
-            fromVersion + 1,
+            fromGlobalPosition + 1,
             aggregateFilter,
             eventTypeFilter,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
-            lastVersion = streamEvent.GlobalPosition;
+            lastGlobalPosition = streamEvent.GlobalPosition;
         }
 
-        return (view, lastVersion);
+        return (view, lastGlobalPosition);
     }
 
     /// <summary>
@@ -60,8 +60,8 @@ public static class ProjectionRunner
     /// <param name="projection">The projection to apply.</param>
     /// <param name="projectionName">The name to use for storing the projection (defaults to projection's name if available).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The current view and checkpoint version.</returns>
-    public static async Task<(TView View, long Version)> CatchUpAsync<TView>(
+    /// <returns>The current view and checkpoint global position.</returns>
+    public static async Task<(TView View, long GlobalPosition)> CatchUpAsync<TView>(
         IEventStore eventStore,
         IProjectionStore projectionStore,
         IProjection<TView> projection,
@@ -84,7 +84,7 @@ public static class ProjectionRunner
         // Load last checkpoint
         var checkpoint = await projectionStore.LoadProjectionAsync<TView>(name, cancellationToken);
         var view = checkpoint is not null ? checkpoint.State : projection.InitialView();
-        var fromVersion = checkpoint?.GlobalPosition ?? 0;
+        var fromGlobalPosition = checkpoint?.GlobalPosition ?? 0;
 
         // Get filters
         string[]? aggregateFilter = null;
@@ -97,23 +97,23 @@ public static class ProjectionRunner
         }
 
         // Process new events
-        var lastVersion = fromVersion;
+        var lastGlobalPosition = fromGlobalPosition;
         await foreach (var streamEvent in eventStore.LoadAllAsync(
-            fromVersion + 1,
+            fromGlobalPosition + 1,
             aggregateFilter,
             eventTypeFilter,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
-            lastVersion = streamEvent.GlobalPosition;
+            lastGlobalPosition = streamEvent.GlobalPosition;
         }
 
         // Save updated checkpoint if we processed any events
-        if (lastVersion > fromVersion)
+        if (lastGlobalPosition > fromGlobalPosition)
         {
-            await projectionStore.SaveProjectionAsync(name, lastVersion, view, cancellationToken);
+            await projectionStore.SaveProjectionAsync(name, lastGlobalPosition, view, cancellationToken);
         }
 
-        return (view, lastVersion);
+        return (view, lastGlobalPosition);
     }
 }
