@@ -11,7 +11,7 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class ProjectionStore : IProjectionStore
 {
     private readonly EventStoreDbContext _context;
-    private readonly EventStoreSerializer _serializer;
+    private readonly WireTypeSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectionStore"/> class.
@@ -21,7 +21,7 @@ public sealed class ProjectionStore : IProjectionStore
     public ProjectionStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _serializer = new EventStoreSerializer(registry);
+        _serializer = new WireTypeSerializer(registry);
     }
 
     /// <inheritdoc />

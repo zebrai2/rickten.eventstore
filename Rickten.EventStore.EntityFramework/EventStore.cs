@@ -12,7 +12,7 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class EventStore : IEventStore
 {
     private readonly EventStoreDbContext _context;
-    private readonly EventStoreSerializer _serializer;
+    private readonly WireTypeSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EventStore"/> class.
@@ -22,7 +22,7 @@ public sealed class EventStore : IEventStore
     public EventStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _serializer = new EventStoreSerializer(registry);
+        _serializer = new WireTypeSerializer(registry);
     }
 
     /// <inheritdoc />

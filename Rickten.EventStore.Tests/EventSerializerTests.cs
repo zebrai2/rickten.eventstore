@@ -7,7 +7,7 @@ using System;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Tests for EventStoreSerializer with registry-backed wire name resolution for events.
+/// Tests for WireTypeSerializer with registry-backed wire name resolution.
 /// </summary>
 public class EventSerializerTests
 {
@@ -26,7 +26,7 @@ public class EventSerializerTests
     public void GetWireName_RegisteredEvent_ReturnsCorrectWireName()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var evt = new TestEvent("test", 42);
 
         var wireName = serializer.GetWireName(evt);
@@ -38,7 +38,7 @@ public class EventSerializerTests
     public void GetWireName_EventWithDifferentVersion_IncludesVersion()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var evt = new SomeEvent(true);
 
         var wireName = serializer.GetWireName(evt);
@@ -50,7 +50,7 @@ public class EventSerializerTests
     public void Serialize_RegisteredEvent_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var evt = new TestEvent("test", 42);
 
         var json = serializer.Serialize(evt);
@@ -64,7 +64,7 @@ public class EventSerializerTests
     public void Deserialize_RegisteredEvent_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"data":"test","count":42}""";
 
         var result = serializer.Deserialize(json, "TestAggregate.TestEvent.v1");
@@ -79,7 +79,7 @@ public class EventSerializerTests
     public void RoundTrip_RegisteredEvent_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var original = new TestEvent("roundtrip", 99);
 
         var wireName = serializer.GetWireName(original);
@@ -96,7 +96,7 @@ public class EventSerializerTests
     public void RoundTrip_MultipleEventTypes_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
 
         var evt1 = new TestEvent("first", 1);
         var evt2 = new AnotherEvent(123.45m);
@@ -128,7 +128,7 @@ public class EventSerializerTests
     public void GetWireName_UnregisteredEvent_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var evt = new UnregisteredEvent("unregistered");
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -142,7 +142,7 @@ public class EventSerializerTests
     public void Deserialize_UnregisteredWireName_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"data":"test"}""";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>

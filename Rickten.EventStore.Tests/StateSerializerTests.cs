@@ -7,7 +7,7 @@ using System;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Tests for EventStoreSerializer ensuring explicit registry-driven type resolution for aggregate state.
+/// Tests for WireTypeSerializer ensuring explicit registry-driven type resolution for aggregate state.
 /// </summary>
 public class StateSerializerTests
 {
@@ -23,7 +23,7 @@ public class StateSerializerTests
     public void Serialize_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var state = new TestState("test", 42);
 
         var json = serializer.Serialize(state);
@@ -37,7 +37,7 @@ public class StateSerializerTests
     public void GetWireName_RegisteredState_ReturnsWireName()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var state = new TestState("test", 42);
 
         var wireName = serializer.GetWireName(state);
@@ -49,7 +49,7 @@ public class StateSerializerTests
     public void GetWireName_UnregisteredState_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var state = new UnregisteredState("unregistered");
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -64,7 +64,7 @@ public class StateSerializerTests
     public void Deserialize_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"test","value":42}""";
 
         var result = serializer.Deserialize(json, "TestAggregate.TestState");
@@ -79,7 +79,7 @@ public class StateSerializerTests
     public void Deserialize_UnregisteredWireName_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"data":"test"}""";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -94,7 +94,7 @@ public class StateSerializerTests
     public void Deserialize_FullNameInsteadOfWireName_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"test","value":42}""";
 
         // Even though TestState is registered, using FullName instead of WireName should fail
@@ -111,7 +111,7 @@ public class StateSerializerTests
     public void RoundTrip_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var original = new TestState("roundtrip", 99);
 
         var wireName = serializer.GetWireName(original);
@@ -128,7 +128,7 @@ public class StateSerializerTests
     public void RoundTrip_MultipleRegisteredStates_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
 
         var state1 = new TestState("first", 1);
         var state2 = new AnotherState(123.45m);
@@ -152,7 +152,7 @@ public class StateSerializerTests
     public void Constructor_NullRegistry_ThrowsArgumentNullException()
     {
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            new EventStoreSerializer(null!));
+            new WireTypeSerializer(null!));
 
         Assert.Equal("registry", ex.ParamName);
     }
@@ -161,7 +161,7 @@ public class StateSerializerTests
     public void Deserialize_NullJson_Throws()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             serializer.Deserialize("null", "TestAggregate.TestState"));

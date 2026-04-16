@@ -9,7 +9,7 @@ using System.Linq;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Unit tests for the EventStoreSerializer class, focusing on dynamic object
+/// Unit tests for the WireTypeSerializer class, focusing on dynamic object
 /// deserialization and typed serialization.
 /// </summary>
 public class SerializerTests
@@ -20,7 +20,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_SimpleObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"Widget","price":99.99}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -34,7 +34,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_WithCamelCaseProperties_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         // Serializer uses camelCase by default
         var json = """{"totalAmount":500,"itemCount":5}""";
 
@@ -48,7 +48,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_NestedObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """
         {
             "order": {
@@ -74,7 +74,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_Array_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"items":[1,2,3,4,5]}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -90,7 +90,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_ArrayOfObjects_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """
         {
             "products": [
@@ -118,7 +118,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_NullValue_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"Test","description":null}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -131,7 +131,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_BooleanValues_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"isActive":true,"isDeleted":false}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -144,7 +144,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_IntegerNumber_ReturnsLong()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"count":42}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -156,7 +156,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_FloatingPointNumber_ReturnsDouble()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"price":99.99}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -168,7 +168,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_LargeNumber_ReturnsDouble()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         // Number too large for long
         var json = """{"bigNumber":9999999999999999999}""";
 
@@ -181,7 +181,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_EmptyObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -195,7 +195,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_EmptyArray_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"items":[]}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -208,7 +208,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_ComplexNestedStructure_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """
         {
             "order": {
@@ -256,7 +256,7 @@ public class SerializerTests
     public void Deserialize_TypedObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"Test Product","price":99.99}""";
 
         var result = serializer.Deserialize<TestProduct>(json);
@@ -269,7 +269,7 @@ public class SerializerTests
     public void Deserialize_TypedObject_WithCamelCase_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"name":"Widget","price":50.00}""";
 
         var result = serializer.Deserialize<TestProduct>(json);
@@ -282,7 +282,7 @@ public class SerializerTests
     public void Deserialize_TypedObject_Null_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = "null";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -299,7 +299,7 @@ public class SerializerTests
     public void Serialize_SimpleObject_UsesCamelCase()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var obj = new { Name = "Widget", Price = 99.99 };
 
         var json = serializer.Serialize(obj);
@@ -314,7 +314,7 @@ public class SerializerTests
     public void Serialize_NullProperty_IsOmitted()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var obj = new { Name = "Test", Description = (string?)null };
 
         var json = serializer.Serialize(obj);
@@ -327,7 +327,7 @@ public class SerializerTests
     public void Serialize_ComplexObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var obj = new
         {
             Order = new
@@ -354,7 +354,7 @@ public class SerializerTests
     public void RoundTrip_SimpleObject_AsTyped_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var original = new TestProduct { Name = "Widget", Price = 99.99m };
 
         var json = serializer.Serialize(original);
@@ -368,7 +368,7 @@ public class SerializerTests
     public void RoundTrip_AnonymousObject_AsDynamic_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var original = new { Count = 5, Total = 100.50, IsActive = true };
 
         var json = serializer.Serialize(original);
@@ -383,7 +383,7 @@ public class SerializerTests
     public void RoundTrip_ComplexObject_AsDynamic_PreservesStructure()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var original = new
         {
             Order = new
@@ -413,7 +413,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_StringWithSpecialCharacters_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"text":"Hello \"World\"\nNew Line\tTab"}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -427,7 +427,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_UnicodeCharacters_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"greeting":"Hello 世界 🌍"}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
@@ -439,7 +439,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_NumberFormats_Work()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """
         {
             "integer":42,
@@ -463,7 +463,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_DeeplyNestedObject_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """
         {
             "level1": {
@@ -487,7 +487,7 @@ public class SerializerTests
     public void Deserialize_Dynamic_MixedTypeArray_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new EventStoreSerializer(registry);
+        var serializer = new WireTypeSerializer(registry);
         var json = """{"mixed":[1,"two",3.0,true,null]}""";
 
         dynamic result = serializer.Deserialize<dynamic>(json);
