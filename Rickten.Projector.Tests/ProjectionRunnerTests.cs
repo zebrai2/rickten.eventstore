@@ -235,4 +235,204 @@ public class ProjectionRunnerTests : IDisposable
         // Should count only the 2 TestOrder events, not the OtherAggregate event
         Assert.Equal(2, view.Count);
     }
+
+    [Fact]
+    public async Task RebuildAsync_WithEventTypeFilter_ProcessesOnlyMatchingEvents()
+    {
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projection = new EventTypeFilteredProjection(); // Filtered to TestOrder.Created.v1
+
+        var orderStream = new StreamIdentifier("TestOrder", "event-filtered-1");
+        await eventStore.AppendAsync(new StreamPointer(orderStream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderCreatedEvent("order-1", 100m), null),
+            new AppendEvent(new TestOrderUpdatedEvent("order-1", "Pending"), null),
+            new AppendEvent(new TestOrderCreatedEvent("order-2", 200m), null)
+        });
+
+        var (view, _) = await ProjectionRunner.RebuildAsync(
+            eventStore,
+            projection,
+            fromGlobalPosition: 0);
+
+        // Should count only the 2 Created events, not the Updated event
+        Assert.Equal(2, view.Count);
+    }
+
+    [Fact]
+    public async Task RebuildAsync_WithBothFilters_ProcessesOnlyMatchingEvents()
+    {
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projection = new BothFiltersProjection(); // Filtered to TestOrder aggregate AND Created events
+
+        // TestOrder events - only Created should be processed
+        var orderStream = new StreamIdentifier("TestOrder", "both-filtered-1");
+        await eventStore.AppendAsync(new StreamPointer(orderStream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderCreatedEvent("order-1", 100m), null),
+            new AppendEvent(new TestOrderUpdatedEvent("order-1", "Pending"), null),
+            new AppendEvent(new TestOrderCreatedEvent("order-2", 200m), null)
+        });
+
+        // OtherAggregate events - should be filtered out by aggregate type
+        var otherStream = new StreamIdentifier("OtherAggregate", "both-filtered-2");
+        await eventStore.AppendAsync(new StreamPointer(otherStream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new OtherAggregateCreatedEvent("other-1", "data"), null)
+        });
+
+        var (view, _) = await ProjectionRunner.RebuildAsync(
+            eventStore,
+            projection,
+            fromGlobalPosition: 0);
+
+        // Should count only the 2 TestOrder.Created events
+        Assert.Equal(2, view.Count);
+    }
+
+    [Fact]
+    public async Task CatchUpAsync_WithEventTypeFilter_ProcessesOnlyMatchingEvents()
+    {
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
+        var projection = new EventTypeFilteredProjection();
+
+        var stream = new StreamIdentifier("TestOrder", "catchup-event-filtered");
+
+        // Initial events
+        await eventStore.AppendAsync(new StreamPointer(stream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderCreatedEvent("order-1", 100m), null),
+            new AppendEvent(new TestOrderUpdatedEvent("order-1", "Pending"), null)
+        });
+
+        // First catch-up
+        var (firstView, _) = await ProjectionRunner.CatchUpAsync(
+            eventStore,
+            projectionStore,
+            projection,
+            "EventTypeFilteredTest");
+
+        Assert.Equal(1, firstView.Count); // Only Created event
+
+        // Add more events
+        await eventStore.AppendAsync(new StreamPointer(stream, 2), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderCreatedEvent("order-2", 200m), null),
+            new AppendEvent(new TestOrderUpdatedEvent("order-2", "Confirmed"), null),
+            new AppendEvent(new TestOrderCreatedEvent("order-3", 300m), null)
+        });
+
+        // Second catch-up
+        var (secondView, _) = await ProjectionRunner.CatchUpAsync(
+            eventStore,
+            projectionStore,
+            projection,
+            "EventTypeFilteredTest");
+
+        Assert.Equal(3, secondView.Count); // 3 total Created events
+    }
+
+    [Fact]
+    public async Task RebuildAsync_FilterMismatch_ThrowsInvalidOperationException()
+    {
+        // This test verifies that when a projection has filters but receives
+        // an event that doesn't match, it throws an exception indicating a mismatch
+        // between the filter configuration and the query.
+
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projection = new EventTypeFilteredProjection(); // Filtered to TestOrder.Created.v1
+
+        var stream = new StreamIdentifier("TestOrder", "mismatch-test");
+        await eventStore.AppendAsync(new StreamPointer(stream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderCreatedEvent("order-1", 100m), null)
+        });
+
+        // Now load ALL events without filtering (simulating misconfiguration)
+        var allEvents = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAllAsync(0, null, null))
+        {
+            allEvents.Add(evt);
+        }
+
+        // Manually apply events without using ProjectionRunner
+        // (which would apply the filters correctly at the query level)
+        var view = projection.InitialView();
+
+        // The Created event should pass
+        view = projection.Apply(view, allEvents[0]);
+        Assert.Equal(1, view.Count);
+
+        // Now add an Updated event that won't be filtered by the query
+        await eventStore.AppendAsync(new StreamPointer(stream, 1), new List<AppendEvent>
+        {
+            new AppendEvent(new TestOrderUpdatedEvent("order-1", "Pending"), null)
+        });
+
+        // Load without event type filter (misconfiguration)
+        var newEvents = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAllAsync(allEvents[^1].GlobalPosition, null, null))
+        {
+            newEvents.Add(evt);
+        }
+
+        // Applying the mismatched event should throw
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            projection.Apply(view, newEvents[0]));
+
+        Assert.Contains("TestOrder.Updated.v1", ex.Message);
+        Assert.Contains("TestOrder.Created.v1", ex.Message);
+        Assert.Contains("filter", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RebuildAsync_AggregateMismatch_ThrowsInvalidOperationException()
+    {
+        // Verifies that aggregate type mismatch throws when query doesn't match filter
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projection = new OrderCounterProjection(); // Filtered to TestOrder
+
+        var stream = new StreamIdentifier("OtherAggregate", "aggregate-mismatch");
+        await eventStore.AppendAsync(new StreamPointer(stream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new OtherAggregateCreatedEvent("other-1", "data"), null)
+        });
+
+        // Load without aggregate filter (misconfiguration)
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAllAsync(0, null, null))
+        {
+            events.Add(evt);
+        }
+
+        // Applying the mismatched event should throw
+        var view = projection.InitialView();
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            projection.Apply(view, events[0]));
+
+        Assert.Contains("OtherAggregate", ex.Message);
+        Assert.Contains("TestOrder", ex.Message);
+        Assert.Contains("filter", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+[Projection("EventTypeFiltered", EventTypes = new[] { "TestOrder.Created.v1" })]
+public class EventTypeFilteredProjection : Projection<OrderCounterState>
+{
+    public override OrderCounterState InitialView() => new OrderCounterState { Count = 0 };
+    protected override OrderCounterState ApplyEvent(OrderCounterState view, StreamEvent streamEvent)
+    {
+        return new OrderCounterState { Count = view.Count + 1 };
+    }
+}
+
+[Projection("BothFilters", AggregateTypes = new[] { "TestOrder" }, EventTypes = new[] { "TestOrder.Created.v1" })]
+public class BothFiltersProjection : Projection<OrderCounterState>
+{
+    public override OrderCounterState InitialView() => new OrderCounterState { Count = 0 };
+    protected override OrderCounterState ApplyEvent(OrderCounterState view, StreamEvent streamEvent)
+    {
+        return new OrderCounterState { Count = view.Count + 1 };
+    }
 }
