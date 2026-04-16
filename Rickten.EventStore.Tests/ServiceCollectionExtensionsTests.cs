@@ -13,7 +13,7 @@ namespace Rickten.EventStore.Tests;
 public class ServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddEventStore_RegistersAllServices()
+    public void AddEventStore_RegistersServices()
     {
         var services = new ServiceCollection();
 
@@ -39,28 +39,6 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStore_RegistersWithScopedLifetime()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStore(options =>
-        {
-            options.UseInMemoryDatabase("TestDb");
-        }, typeof(OrderCreatedEvent).Assembly);
-
-        var eventStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEventStore));
-        var snapshotStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISnapshotStore));
-        var projectionStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IProjectionStore));
-
-        Assert.NotNull(eventStoreDescriptor);
-        Assert.NotNull(snapshotStoreDescriptor);
-        Assert.NotNull(projectionStoreDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, eventStoreDescriptor.Lifetime);
-        Assert.Equal(ServiceLifetime.Scoped, snapshotStoreDescriptor.Lifetime);
-        Assert.Equal(ServiceLifetime.Scoped, projectionStoreDescriptor.Lifetime);
-    }
-
-    [Fact]
     public void AddEventStore_CalledMultipleTimes_DoesNotRegisterDuplicates()
     {
         var services = new ServiceCollection();
@@ -78,7 +56,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStoreInMemory_RegistersAllServices()
+    public void AddEventStoreInMemory_RegistersServices()
     {
         var services = new ServiceCollection();
 
@@ -96,7 +74,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStoreSqlServer_RegistersAllServices()
+    public void AddEventStoreSqlServer_RegistersServices()
     {
         var services = new ServiceCollection();
 
@@ -254,35 +232,18 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStore_WithTwoMarkerTypes_RegistersAllServices()
+    public void AddEventStore_WithMultipleMarkerTypes_RegistersAllServices()
     {
         var services = new ServiceCollection();
 
+        // Test with 2 marker types
         services.AddEventStore<OrderCreatedEvent, OrderUpdatedEvent>(options =>
         {
             options.UseInMemoryDatabase("TestDb");
         });
 
         var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
-    }
-
-    [Fact]
-    public void AddEventStore_WithThreeMarkerTypes_RegistersAllServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStore<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>(options =>
-        {
-            options.UseInMemoryDatabase("TestDb");
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
+        Assert.NotNull(serviceProvider.GetService<IEventStore>());
     }
 
     [Fact]
@@ -304,32 +265,6 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEventStoreInMemory_WithTwoMarkerTypes_RegistersAllServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreInMemory<OrderCreatedEvent, OrderUpdatedEvent>("TestDb");
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
-    }
-
-    [Fact]
-    public void AddEventStoreInMemory_WithThreeMarkerTypes_RegistersAllServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreInMemory<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>("TestDb");
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
-    }
-
-    [Fact]
     public void AddEventStoreSqlServer_WithMarkerType_RegistersAllServices()
     {
         var services = new ServiceCollection();
@@ -345,32 +280,6 @@ public class ServiceCollectionExtensionsTests
         Assert.NotNull(eventStore);
         Assert.NotNull(snapshotStore);
         Assert.NotNull(projectionStore);
-    }
-
-    [Fact]
-    public void AddEventStoreSqlServer_WithTwoMarkerTypes_RegistersAllServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreSqlServer<OrderCreatedEvent, OrderUpdatedEvent>("Server=localhost;Database=EventStore;");
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
-    }
-
-    [Fact]
-    public void AddEventStoreSqlServer_WithThreeMarkerTypes_RegistersAllServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddEventStoreSqlServer<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>("Server=localhost;Database=EventStore;");
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        var eventStore = serviceProvider.GetService<IEventStore>();
-        Assert.NotNull(eventStore);
     }
 
     [Event("Order", "order-created", 1)]

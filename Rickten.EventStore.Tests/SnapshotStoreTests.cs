@@ -26,7 +26,7 @@ public class SnapshotStoreTests
     private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), Registry);
 
     [Fact]
-    public async Task SaveAndLoadSnapshot_Works()
+    public async Task SaveAndLoadSnapshot_VerifiesVersionAndPayload()
     {
         var dbName = Guid.NewGuid().ToString();
         var store = CreateStore(dbName);
@@ -52,7 +52,7 @@ public class SnapshotStoreTests
     }
 
     [Fact]
-    public async Task SaveSnapshotAsync_UpdatesExisting()
+    public async Task SaveSnapshotAsync_UpdatesExistingVersionAndPayload()
     {
         var dbName = Guid.NewGuid().ToString();
         var store = CreateStore(dbName);

@@ -174,24 +174,8 @@ public class TypeMetadataRegistryTests
         Assert.NotNull(registry.GetMetadataByType(typeof(TestCommand)));
     }
 
-    [Fact]
-    public void Build_WithDuplicateEventWireName_ThrowsInvalidOperationException()
-    {
-        // We can't test this with actual attributes in the same assembly since
-        // all tests would fail. Instead we verify the behavior through the error message
-        // and by ensuring that normal builds work without duplicates
-
-        // This test verifies that IF there were duplicates, they would be detected
-        // The actual duplicate detection is tested indirectly by ensuring all
-        // our other tests pass (which means no accidental duplicates exist)
-
-        var registry = new TypeMetadataRegistryBuilder()
-            .AddAssembly(typeof(TestEventOne).Assembly)
-            .Build();
-
-        // If we got here, there are no duplicates in the test assembly
-        Assert.NotNull(registry);
-    }
+    // Note: Duplicate wire name detection is thoroughly tested in TypeMetadataRegistryDuplicateTests
+    // using dynamic assembly creation. This test class focuses on positive path validation.
 
     [Fact]
     public void AddAssembly_SameAssemblyMultipleTimes_OnlyAddsOnce()
@@ -293,20 +277,9 @@ public class TypeMetadataRegistryTests
         var eventTypes = registry.GetEventTypesForAggregate("TestRegistry");
 
         Assert.IsAssignableFrom<IReadOnlyCollection<Type>>(eventTypes);
-    }
-
-    [Fact]
-    public void GetEventTypesForAggregate_ReturnsReadOnlyCollection_CannotBeModified()
-    {
-        var registry = new TypeMetadataRegistryBuilder()
-            .AddAssembly(typeof(TestEventOne).Assembly)
-            .Build();
-
-        var eventTypes = registry.GetEventTypesForAggregate("TestRegistry");
-
-        // Verify it's a readonly collection and cannot be cast to modifiable types
-        Assert.IsAssignableFrom<IReadOnlyCollection<Type>>(eventTypes);
-        Assert.IsNotType<List<Type>>(eventTypes);
+        Assert.Equal(2, eventTypes.Count);
+        Assert.Contains(typeof(TestEventOne), eventTypes);
+        Assert.Contains(typeof(TestEventTwo), eventTypes);
     }
 
     [Fact]
