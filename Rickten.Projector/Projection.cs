@@ -86,12 +86,17 @@ public abstract class Projection<TView> : IProjection<TView>
         {
             var eventType = streamEvent.Event.GetType();
             var eventAttr = eventType.GetCustomAttribute<EventAttribute>();
-            var eventName = eventAttr?.Name ?? eventType.Name;
 
-            if (!info.EventTypes.Contains(eventName))
+            // Build the wire name to match what's used in query filters
+            // Wire name format: {Aggregate}.{Name}.v{Version}
+            var eventWireName = eventAttr != null
+                ? $"{eventAttr.Aggregate}.{eventAttr.Name}.v{eventAttr.Version}"
+                : eventType.Name;
+
+            if (!info.EventTypes.Contains(eventWireName))
             {
                 throw new InvalidOperationException(
-                    $"Projection '{info.Name}' received event '{eventName}' " +
+                    $"Projection '{info.Name}' received event '{eventWireName}' " +
                     $"but filter only allows: {string.Join(", ", info.EventTypes)}. " +
                     $"This indicates a mismatch between attribute filter and query.");
             }
