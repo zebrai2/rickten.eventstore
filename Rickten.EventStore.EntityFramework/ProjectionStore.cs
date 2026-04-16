@@ -7,6 +7,7 @@ namespace Rickten.EventStore.EntityFramework;
 
 /// <summary>
 /// Entity Framework Core implementation of <see cref="IProjectionStore"/>.
+/// Projection state types must be decorated with [Projection] attribute for type resolution.
 /// </summary>
 public sealed class ProjectionStore : IProjectionStore
 {
@@ -39,9 +40,23 @@ public sealed class ProjectionStore : IProjectionStore
             return null;
         }
 
-        var state = _serializer.Deserialize<TState>(entity.State);
+        // Deserialize using stored wire type
+        var state = _serializer.Deserialize(entity.State, entity.StateType);
 
-        return new Projection<TState>(state, entity.GlobalPosition);
+        // Validate that the deserialized state is assignable to TState
+        if (state is not TState typedState)
+        {
+            var actualType = state.GetType();
+            var requestedType = typeof(TState);
+
+            throw new InvalidOperationException(
+                $"Projection state type mismatch for key '{projectionKey}'. " +
+                $"Stored wire type '{entity.StateType}' resolved to CLR type '{actualType.FullName}', " +
+                $"which is not assignable to requested type '{requestedType.FullName}'. " +
+                $"Ensure the projection state type matches the type used when saving.");
+        }
+
+        return new Projection<TState>(typedState, entity.GlobalPosition);
     }
 
     /// <inheritdoc />
@@ -59,6 +74,7 @@ public sealed class ProjectionStore : IProjectionStore
                 cancellationToken);
 
         var serializedState = _serializer.Serialize(state);
+        var stateType = _serializer.GetWireName(state);
 
         if (entity == null)
         {
@@ -66,6 +82,7 @@ public sealed class ProjectionStore : IProjectionStore
             {
                 ProjectionKey = projectionKey,
                 GlobalPosition = globalPosition,
+                StateType = stateType,
                 State = serializedState,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -74,6 +91,7 @@ public sealed class ProjectionStore : IProjectionStore
         else
         {
             entity.GlobalPosition = globalPosition;
+            entity.StateType = stateType;
             entity.State = serializedState;
             entity.UpdatedAt = DateTime.UtcNow;
         }

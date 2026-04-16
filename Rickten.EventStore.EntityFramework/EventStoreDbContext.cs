@@ -124,6 +124,10 @@ public sealed class EventStoreDbContext : DbContext
             entity.Property(e => e.GlobalPosition)
                 .IsRequired();
 
+            entity.Property(e => e.StateType)
+                .IsRequired()
+                .HasMaxLength(255);
+
             entity.Property(e => e.State)
                 .IsRequired();
 

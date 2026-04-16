@@ -183,7 +183,7 @@ public sealed class EventStore : IEventStore
             entity.Version);
 
         var eventData = _serializer.Deserialize(entity.EventData, entity.EventType);
-        var metadata = _serializer.Deserialize<EventMetadata[]>(entity.Metadata);
+        var metadata = _serializer.DeserializeInfrastructure<EventMetadata[]>(entity.Metadata);
 
         return new StreamEvent(
             streamPointer,

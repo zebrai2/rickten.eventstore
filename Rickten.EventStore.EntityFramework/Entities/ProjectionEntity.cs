@@ -16,6 +16,11 @@ public sealed class ProjectionEntity
     public long GlobalPosition { get; set; }
 
     /// <summary>
+    /// Gets or sets the wire type name of the projection state.
+    /// </summary>
+    public required string StateType { get; set; }
+
+    /// <summary>
     /// Gets or sets the serialized projection state as JSON.
     /// </summary>
     public required string State { get; set; }

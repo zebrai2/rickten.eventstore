@@ -225,6 +225,7 @@ public class EventStoreDbContextTests
             {
                 ProjectionKey = "OrderSummary",
                 GlobalPosition = 100,
+                StateType = "TestProjection.State",
                 State = "{\"count\":5}",
                 UpdatedAt = DateTime.UtcNow
             };

@@ -1,4 +1,3 @@
-using System.Dynamic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Rickten.EventStore.TypeMetadata;
@@ -8,6 +7,7 @@ namespace Rickten.EventStore.EntityFramework.Serialization;
 /// <summary>
 /// Unified serializer for wire-type-based serialization.
 /// Translates between CLR types, wire types, and JSON payloads using the type metadata registry.
+/// All persistence operations use wire types for self-describing storage.
 /// </summary>
 public sealed class WireTypeSerializer
 {
@@ -56,19 +56,16 @@ public sealed class WireTypeSerializer
     }
 
     /// <summary>
-    /// Deserializes JSON to a known type without wire name resolution.
+    /// Deserializes JSON to a known infrastructure type that doesn't participate in the wire-type model.
+    /// This is for internal types like EventMetadata that are not domain types.
     /// </summary>
-    public T Deserialize<T>(string json)
+    /// <typeparam name="T">The infrastructure type to deserialize to.</typeparam>
+    /// <param name="json">The JSON string to deserialize.</param>
+    /// <returns>The deserialized object.</returns>
+    internal T DeserializeInfrastructure<T>(string json)
     {
-        // Handle dynamic types by deserializing to JsonElement first
-        if (typeof(T) == typeof(object) || typeof(T).Name == "Object")
-        {
-            var element = JsonSerializer.Deserialize<JsonElement>(json, JsonOptions);
-            return (T)(object)ConvertJsonElementToDynamic(element);
-        }
-
         return JsonSerializer.Deserialize<T>(json, JsonOptions)
-            ?? throw new InvalidOperationException($"Failed to deserialize to type '{typeof(T).FullName}'");
+            ?? throw new InvalidOperationException($"Failed to deserialize infrastructure type '{typeof(T).FullName}'");
     }
 
     /// <summary>
@@ -87,7 +84,7 @@ public sealed class WireTypeSerializer
 
         throw new InvalidOperationException(
             $"Type '{type.FullName}' is not registered in the ITypeMetadataRegistry or does not have a wire name. " +
-            $"Ensure the type is decorated with an appropriate attribute (e.g., [Event], [Aggregate]) and the assembly is registered.");
+            $"Ensure the type is decorated with an appropriate attribute (e.g., [Event], [Aggregate], [Projection]) and the assembly is registered.");
     }
 
     /// <summary>
@@ -104,44 +101,6 @@ public sealed class WireTypeSerializer
 
         throw new InvalidOperationException(
             $"Type '{type.FullName}' is not registered in the ITypeMetadataRegistry or does not have a wire name. " +
-            $"Ensure the type is decorated with an appropriate attribute (e.g., [Event], [Aggregate]) and the assembly is registered.");
-    }
-
-    private static dynamic ConvertJsonElementToDynamic(JsonElement element)
-    {
-        return element.ValueKind switch
-        {
-            JsonValueKind.Object => ConvertJsonObject(element),
-            JsonValueKind.Array => ConvertJsonArray(element),
-            JsonValueKind.String => element.GetString()!,
-            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null!,
-            _ => throw new InvalidOperationException($"Unsupported JSON value kind: {element.ValueKind}")
-        };
-    }
-
-    private static dynamic ConvertJsonObject(JsonElement element)
-    {
-        var expando = new ExpandoObject();
-        var dictionary = (IDictionary<string, object?>)expando;
-
-        foreach (var property in element.EnumerateObject())
-        {
-            dictionary[property.Name] = ConvertJsonElementToDynamic(property.Value);
-        }
-
-        return expando;
-    }
-
-    private static dynamic ConvertJsonArray(JsonElement element)
-    {
-        var list = new List<object?>();
-        foreach (var item in element.EnumerateArray())
-        {
-            list.Add(ConvertJsonElementToDynamic(item));
-        }
-        return list;
+            $"Ensure the type is decorated with an appropriate attribute (e.g., [Event], [Aggregate], [Projection]) and the assembly is registered.");
     }
 }

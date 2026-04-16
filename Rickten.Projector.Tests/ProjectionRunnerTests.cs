@@ -13,11 +13,20 @@ public record TestOrderUpdatedEvent(string OrderId, string Status);
 [Event("OtherAggregate", "Created", 1)]
 public record OtherAggregateCreatedEvent(string Id, string Data);
 
-[Projection("OrderCounter", AggregateTypes = new[] { "TestOrder" })]
-public class OrderCounterProjection : Projection<int>
+[Projection("OrderCounter")]
+public class OrderCounterState
 {
-    public override int InitialView() => 0;
-    protected override int ApplyEvent(int view, StreamEvent streamEvent) => view + 1;
+    public int Count { get; set; }
+}
+
+[Projection("OrderCounter", AggregateTypes = new[] { "TestOrder" })]
+public class OrderCounterProjection : Projection<OrderCounterState>
+{
+    public override OrderCounterState InitialView() => new OrderCounterState { Count = 0 };
+    protected override OrderCounterState ApplyEvent(OrderCounterState view, StreamEvent streamEvent)
+    {
+        return new OrderCounterState { Count = view.Count + 1 };
+    }
 }
 
 public class ProjectionRunnerTests : IDisposable
@@ -67,7 +76,7 @@ public class ProjectionRunnerTests : IDisposable
             projection,
             fromGlobalPosition: 0);
 
-        Assert.Equal(3, firstView); // 3 events processed
+        Assert.Equal(3, firstView.Count); // 3 events processed
         Assert.True(firstCheckpoint > 0);
 
         // Add more events after checkpoint
@@ -90,7 +99,7 @@ public class ProjectionRunnerTests : IDisposable
 
         // Critical assertion: should count only 2 new events, not 3
         // If it counted 3, it would have replayed the checkpoint event
-        Assert.Equal(2, secondView);
+        Assert.Equal(2, secondView.Count);
         Assert.True(secondCheckpoint > firstCheckpoint);
     }
 
@@ -122,13 +131,13 @@ public class ProjectionRunnerTests : IDisposable
             projection,
             "OrderCounter");
 
-        Assert.Equal(3, firstView); // 3 events processed
+        Assert.Equal(3, firstView.Count); // 3 events processed
         Assert.True(firstCheckpoint > 0);
 
         // Verify checkpoint was saved
-        var savedCheckpoint = await projectionStore.LoadProjectionAsync<int>("OrderCounter");
+        var savedCheckpoint = await projectionStore.LoadProjectionAsync<OrderCounterState>("OrderCounter");
         Assert.NotNull(savedCheckpoint);
-        Assert.Equal(3, savedCheckpoint.State);
+        Assert.Equal(3, savedCheckpoint.State.Count);
         Assert.Equal(firstCheckpoint, savedCheckpoint.GlobalPosition);
 
         // Add more events
@@ -147,13 +156,13 @@ public class ProjectionRunnerTests : IDisposable
 
         // Critical assertion: should be 5 total (3 from before + 2 new)
         // If it replayed the checkpoint event, it would be 6
-        Assert.Equal(5, secondView);
+        Assert.Equal(5, secondView.Count);
         Assert.True(secondCheckpoint > firstCheckpoint);
 
         // Verify final checkpoint
-        var finalCheckpoint = await projectionStore.LoadProjectionAsync<int>("OrderCounter");
+        var finalCheckpoint = await projectionStore.LoadProjectionAsync<OrderCounterState>("OrderCounter");
         Assert.NotNull(finalCheckpoint);
-        Assert.Equal(5, finalCheckpoint.State);
+        Assert.Equal(5, finalCheckpoint.State.Count);
         Assert.Equal(secondCheckpoint, finalCheckpoint.GlobalPosition);
     }
 
@@ -182,7 +191,7 @@ public class ProjectionRunnerTests : IDisposable
             projection,
             "NoUpdateTest");
 
-        Assert.Equal(1, firstView);
+        Assert.Equal(1, firstView.Count);
         Assert.True(firstCheckpoint > 0);
 
         // Second catch-up with no new events
@@ -193,7 +202,7 @@ public class ProjectionRunnerTests : IDisposable
             "NoUpdateTest");
 
         // Should return same view and checkpoint
-        Assert.Equal(1, secondView);
+        Assert.Equal(1, secondView.Count);
         Assert.Equal(firstCheckpoint, secondCheckpoint);
     }
 
@@ -224,6 +233,6 @@ public class ProjectionRunnerTests : IDisposable
             fromGlobalPosition: 0);
 
         // Should count only the 2 TestOrder events, not the OtherAggregate event
-        Assert.Equal(2, view);
+        Assert.Equal(2, view.Count);
     }
 }
