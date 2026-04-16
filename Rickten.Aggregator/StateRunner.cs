@@ -26,11 +26,10 @@ public static class StateRunner
         ISnapshotStore? snapshotStore = null,
         CancellationToken cancellationToken = default)
     {
+        // Determine starting state and version
         TState state;
         long version;
-        long expectedVersion;
 
-        // Try to load from snapshot first
         if (snapshotStore != null)
         {
             var snapshot = await snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken);
@@ -38,22 +37,17 @@ public static class StateRunner
             {
                 state = snapshotState;
                 version = snapshot.StreamPointer.Version;
-                expectedVersion = version + 1;
             }
             else
             {
-                // No snapshot found, start from beginning
                 state = folder.InitialState();
                 version = 0;
-                expectedVersion = 1;
             }
         }
         else
         {
-            // No snapshot store provided, start from beginning
             state = folder.InitialState();
             version = 0;
-            expectedVersion = 1;
         }
 
         var pointer = new StreamPointer(streamIdentifier, version);
@@ -69,6 +63,8 @@ public static class StateRunner
             }
 
             // Validate version ordering (events are 1-indexed)
+            // The next event must be exactly version + 1
+            var expectedVersion = version + 1;
             if (streamEvent.StreamPointer.Version != expectedVersion)
             {
                 if (streamEvent.StreamPointer.Version < expectedVersion)
@@ -96,7 +92,6 @@ public static class StateRunner
             // Apply event to state
             state = folder.Apply(state, streamEvent.Event);
             version = streamEvent.StreamPointer.Version;
-            expectedVersion = version + 1;
         }
 
         return (state, version);
