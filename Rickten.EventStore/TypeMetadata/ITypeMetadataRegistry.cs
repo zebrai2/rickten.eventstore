@@ -26,9 +26,4 @@ public interface ITypeMetadataRegistry
     /// <param name="aggregateName">The aggregate name.</param>
     /// <returns>A readonly collection of event types for the aggregate.</returns>
     IReadOnlyCollection<Type> GetEventTypesForAggregate(string aggregateName);
-
-    /// <summary>
-    /// Gets all registered type metadata.
-    /// </summary>
-    IReadOnlyCollection<TypeMetadata> GetAllMetadata();
 }

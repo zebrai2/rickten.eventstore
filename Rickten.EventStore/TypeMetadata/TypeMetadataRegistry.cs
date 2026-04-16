@@ -12,7 +12,6 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
     private readonly IReadOnlyDictionary<Type, TypeMetadata> _typeToMetadata;
     private readonly IReadOnlyDictionary<string, Type> _wireNameToType;
     private readonly IReadOnlyDictionary<string, IReadOnlyCollection<Type>> _aggregateToEventTypes;
-    private readonly IReadOnlyCollection<TypeMetadata> _allMetadata;
 
     /// <summary>
     /// Initializes a new instance of the TypeMetadataRegistry.
@@ -22,17 +21,15 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
     {
         ArgumentNullException.ThrowIfNull(assemblies);
 
-        var allMetadataList = new List<TypeMetadata>();
         var typeToMetadata = new Dictionary<Type, TypeMetadata>();
         var wireNameToType = new Dictionary<string, Type>();
         var aggregateToEventTypes = new Dictionary<string, HashSet<Type>>();
 
         foreach (var assembly in assemblies)
         {
-            ScanAssembly(assembly, allMetadataList, typeToMetadata, wireNameToType, aggregateToEventTypes);
+            ScanAssembly(assembly, typeToMetadata, wireNameToType, aggregateToEventTypes);
         }
 
-        _allMetadata = allMetadataList.AsReadOnly();
         _typeToMetadata = typeToMetadata;
         _wireNameToType = wireNameToType;
         _aggregateToEventTypes = aggregateToEventTypes.ToDictionary(
@@ -60,15 +57,10 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
             : Array.Empty<Type>();
     }
 
-    /// <inheritdoc />
-    public IReadOnlyCollection<TypeMetadata> GetAllMetadata()
-    {
-        return _allMetadata;
-    }
+
 
     private static void ScanAssembly(
         Assembly assembly,
-        List<TypeMetadata> allMetadataList,
         Dictionary<Type, TypeMetadata> typeToMetadata,
         Dictionary<string, Type> wireNameToType,
         Dictionary<string, HashSet<Type>> aggregateToEventTypes)
@@ -92,14 +84,13 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
 
             if (metadataAttr == null) continue;
 
-            ProcessTypeMetadata(type, metadataAttr, allMetadataList, typeToMetadata, wireNameToType, aggregateToEventTypes);
+            ProcessTypeMetadata(type, metadataAttr, typeToMetadata, wireNameToType, aggregateToEventTypes);
         }
     }
 
     private static void ProcessTypeMetadata(
         Type type,
         ITypeMetadata metadataAttr,
-        List<TypeMetadata> allMetadataList,
         Dictionary<Type, TypeMetadata> typeToMetadata,
         Dictionary<string, Type> wireNameToType,
         Dictionary<string, HashSet<Type>> aggregateToEventTypes)
@@ -118,7 +109,6 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
                 AttributeInstance = (Attribute)metadataAttr
             };
 
-            allMetadataList.Add(metadataWithoutWireName);
             typeToMetadata[type] = metadataWithoutWireName;
             return;
         }
@@ -139,7 +129,6 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
             AttributeInstance = (Attribute)metadataAttr
         };
 
-        allMetadataList.Add(metadata);
         typeToMetadata[type] = metadata;
         wireNameToType[wireName] = type;
 

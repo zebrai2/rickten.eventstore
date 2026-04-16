@@ -160,21 +160,18 @@ public class TypeMetadataRegistryTests
     }
 
     [Fact]
-    public void GetAllMetadata_ReturnsAllRegisteredTypes()
+    public void GetMetadataByType_SupportsMultipleTypesFromSameAssembly()
     {
         var registry = new TypeMetadataRegistryBuilder()
             .AddAssembly(typeof(TestEventOne).Assembly)
             .Build();
 
-        var allMetadata = registry.GetAllMetadata();
-
-        Assert.NotNull(allMetadata);
-        Assert.True(allMetadata.Count >= 5); // At least our 5 test types
-        Assert.Contains(allMetadata, m => m.ClrType == typeof(TestEventOne));
-        Assert.Contains(allMetadata, m => m.ClrType == typeof(TestEventTwo));
-        Assert.Contains(allMetadata, m => m.ClrType == typeof(TestEventThree));
-        Assert.Contains(allMetadata, m => m.ClrType == typeof(TestAggregateState));
-        Assert.Contains(allMetadata, m => m.ClrType == typeof(TestCommand));
+        // Verify that all our test types are individually accessible via lookup
+        Assert.NotNull(registry.GetMetadataByType(typeof(TestEventOne)));
+        Assert.NotNull(registry.GetMetadataByType(typeof(TestEventTwo)));
+        Assert.NotNull(registry.GetMetadataByType(typeof(TestEventThree)));
+        Assert.NotNull(registry.GetMetadataByType(typeof(TestAggregateState)));
+        Assert.NotNull(registry.GetMetadataByType(typeof(TestCommand)));
     }
 
     [Fact]
@@ -249,8 +246,10 @@ public class TypeMetadataRegistryTests
     {
         var registry = new TypeMetadataRegistryBuilder().Build();
 
-        var allMetadata = registry.GetAllMetadata();
-        Assert.Empty(allMetadata);
+        // Verify registry returns null/empty for lookups when no assemblies registered
+        Assert.Null(registry.GetMetadataByType(typeof(TestEventOne)));
+        Assert.Null(registry.GetTypeByWireName("TestRegistry.EventOne.v1"));
+        Assert.Empty(registry.GetEventTypesForAggregate("TestRegistry"));
     }
 
     [Fact]
@@ -297,15 +296,17 @@ public class TypeMetadataRegistryTests
     }
 
     [Fact]
-    public void GetAllMetadata_ReturnsReadOnlyCollection()
+    public void GetEventTypesForAggregate_ReturnsReadOnlyCollection_CannotBeModified()
     {
         var registry = new TypeMetadataRegistryBuilder()
             .AddAssembly(typeof(TestEventOne).Assembly)
             .Build();
 
-        var allMetadata = registry.GetAllMetadata();
+        var eventTypes = registry.GetEventTypesForAggregate("TestRegistry");
 
-        Assert.IsAssignableFrom<IReadOnlyCollection<Rickten.EventStore.TypeMetadata.TypeMetadata>>(allMetadata);
+        // Verify it's a readonly collection and cannot be cast to modifiable types
+        Assert.IsAssignableFrom<IReadOnlyCollection<Type>>(eventTypes);
+        Assert.IsNotType<List<Type>>(eventTypes);
     }
 
     [Fact]
