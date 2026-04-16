@@ -36,6 +36,10 @@ public class SnapshotStoreTests
         var loaded = await store.LoadSnapshotAsync(pointer.Stream);
         Assert.NotNull(loaded);
         Assert.Equal(pointer.Version, loaded.StreamPointer.Version);
+
+        // Verify payload correctness, not just version
+        var loadedState = Assert.IsType<OrderState>(loaded.State);
+        Assert.Equal("shipped", loadedState.Status);
     }
 
     [Fact]
@@ -59,5 +63,10 @@ public class SnapshotStoreTests
         var loaded = await store.LoadSnapshotAsync(pointer.Stream);
         Assert.NotNull(loaded);
         Assert.Equal(2, loaded.StreamPointer.Version);
+
+        // Verify payload was updated, not just version
+        var loadedState = Assert.IsType<OrderState>(loaded.State);
+        Assert.Equal("complete", loadedState.Status);
     }
 }
+

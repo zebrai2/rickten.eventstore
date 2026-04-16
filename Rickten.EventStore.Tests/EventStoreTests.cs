@@ -91,6 +91,13 @@ public class EventStoreTests
             filtered.Add(e);
         Assert.Single(filtered);
         Assert.Equal("Order", filtered[0].StreamPointer.Stream.StreamType);
+
+        // Filter by event type using wire name
+        var eventFiltered = new List<StreamEvent>();
+        await foreach (var e in store.LoadAllAsync(0, null, new[] { "Invoice.Created.v1" }))
+            eventFiltered.Add(e);
+        Assert.Single(eventFiltered);
+        Assert.IsType<InvoiceCreatedEvent>(eventFiltered[0].Event);
     }
 
     [Fact]
