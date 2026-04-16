@@ -317,5 +317,64 @@ public class EventStoreTests
         // Verify version 3 is NOT included (this would be the bug)
         Assert.DoesNotContain(loaded, e => e.StreamPointer.Version == 3);
     }
+
+    [Fact]
+    public async Task LoadAllAsync_FromCheckpoint_DoesNotReplayCheckpointEvent()
+    {
+        // This test verifies that LoadAllAsync uses exclusive semantics:
+        // If fromGlobalPosition is N, it should load events with global position > N,
+        // not >= N. This prevents double-processing when resuming from a checkpoint.
+
+        var dbName = Guid.NewGuid().ToString();
+        var store = CreateStore(dbName);
+
+        // Create multiple events across different streams
+        var stream1 = new StreamIdentifier("Order", "checkpoint-test-1");
+        var stream2 = new StreamIdentifier("Order", "checkpoint-test-2");
+        var stream3 = new StreamIdentifier("Invoice", "checkpoint-test-3");
+
+        await store.AppendAsync(new StreamPointer(stream1, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new OrderCreatedEvent(100), null),
+            new AppendEvent(new OrderUpdatedEvent("Pending"), null)
+        });
+
+        await store.AppendAsync(new StreamPointer(stream2, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new OrderCreatedEvent(200), null)
+        });
+
+        await store.AppendAsync(new StreamPointer(stream3, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new InvoiceCreatedEvent(300), null),
+            new AppendEvent(new InvoiceCreatedEvent(400), null)
+        });
+
+        // Load all events to get their global positions
+        var allEvents = new List<StreamEvent>();
+        await foreach (var e in store.LoadAllAsync(0))
+            allEvents.Add(e);
+
+        Assert.Equal(5, allEvents.Count);
+
+        // Simulate a checkpoint: we've processed up to the 3rd event (global position N)
+        var checkpointPosition = allEvents[2].GlobalPosition;
+
+        // Now resume from checkpoint - should load events AFTER position N (exclusive)
+        var resumedEvents = new List<StreamEvent>();
+        await foreach (var e in store.LoadAllAsync(checkpointPosition))
+            resumedEvents.Add(e);
+
+        // Should get only the last 2 events (indices 3 and 4)
+        Assert.Equal(2, resumedEvents.Count);
+        Assert.Equal(allEvents[3].GlobalPosition, resumedEvents[0].GlobalPosition);
+        Assert.Equal(allEvents[4].GlobalPosition, resumedEvents[1].GlobalPosition);
+
+        // Critical: verify the checkpoint event itself is NOT included (exclusive semantics)
+        Assert.DoesNotContain(resumedEvents, e => e.GlobalPosition == checkpointPosition);
+
+        // All loaded events should have global position > checkpoint
+        Assert.All(resumedEvents, e => Assert.True(e.GlobalPosition > checkpointPosition));
+    }
 }
 

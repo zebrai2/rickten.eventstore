@@ -26,10 +26,11 @@ public static class TestServiceFactory
         var services = new ServiceCollection();
 
         // Use the AddEventStore service installer with SQLite
+        // Pass the test assembly to register test event types
         services.AddEventStore(options =>
         {
             options.UseSqlite(connection);
-        });
+        }, typeof(TestServiceFactory).Assembly);
 
         var serviceProvider = services.BuildServiceProvider();
 

@@ -215,7 +215,7 @@ public abstract class EventStoreIntegrationTestsBase
         }
 
         Assert.True(eventsFromPosition5.Count > 0);
-        Assert.All(eventsFromPosition5, evt => Assert.True(evt.GlobalPosition >= 5));
+        Assert.All(eventsFromPosition5, evt => Assert.True(evt.GlobalPosition > 5));
     }
 
     [SkippableFact]
