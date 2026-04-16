@@ -878,6 +878,7 @@ public class OrderQueryHandler
 ```csharp
 services.AddEventStoreSqlServer(
     Configuration.GetConnectionString("EventStore"),
+    new[] { typeof(MyEvent).Assembly },
     sqlOptions =>
     {
         sqlOptions.EnableRetryOnFailure(5);
@@ -901,7 +902,7 @@ services.AddEventStore(options =>
         {
             npgsqlOptions.EnableRetryOnFailure(5);
         });
-});
+}, typeof(MyEvent).Assembly);
 ```
 
 ### SQLite
@@ -914,7 +915,7 @@ dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 services.AddEventStore(options =>
 {
     options.UseSqlite("Data Source=eventstore.db");
-});
+}, typeof(MyEvent).Assembly);
 ```
 
 ### Migrations

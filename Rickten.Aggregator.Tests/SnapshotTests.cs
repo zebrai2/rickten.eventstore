@@ -196,6 +196,7 @@ public class SnapshotTests
 
             // Should still be at version 25 (no new snapshot)
             var snapshotAfter = await snapshotStore.LoadSnapshotAsync(streamId);
+            Assert.NotNull(snapshotAfter);
             Assert.Equal(snapshotBefore.StreamPointer.Version, snapshotAfter.StreamPointer.Version);
         }
     }

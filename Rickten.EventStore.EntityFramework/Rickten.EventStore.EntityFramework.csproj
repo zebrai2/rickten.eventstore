@@ -22,6 +22,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;postgresql;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon-128.png</PackageIcon>
     <PackageReleaseNotes>Initial release with Entity Framework Core support for event sourcing, snapshots, and projections. Includes dependency injection extensions.</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
@@ -50,6 +51,7 @@
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\assets\icon\icon-128.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

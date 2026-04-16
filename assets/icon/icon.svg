@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+    width="128" height="128" viewBox="0 0 16 16" fill="none">
+  <title>Rickten.EventStore icon</title>
+  <desc>Single append arrow over an open ordered event store.</desc>
+
+  <!-- single append arrow -->
+  <rect x="6" y="1" width="4" height="3" rx="0.25" fill="#1F5FBF"/>
+  <path d="M4 4H12L8 7L4 4Z" fill="#1F5FBF"/>
+
+  <!-- open bounded store/container -->
+  <rect x="2" y="6" width="2" height="8" rx="1" fill="#1F5FBF"/>
+  <rect x="12" y="6" width="2" height="8" rx="1" fill="#1F5FBF"/>
+  <rect x="2" y="12" width="12" height="2" rx="1" fill="#1F5FBF"/>
+
+  <!-- ordered internal bars -->
+  <rect x="5" y="7" width="6" height="1.25" rx="0.35" fill="#445164"/>
+  <rect x="5" y="9" width="6" height="1.25" rx="0.35" fill="#445164"/>
+  <rect x="5" y="11" width="6" height="1.25" rx="0.35" fill="#445164"/>
+</svg>
