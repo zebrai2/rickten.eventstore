@@ -100,42 +100,5 @@ public abstract class Projection<TView> : IProjection<TView>
         return true;
     }
 
-    private static Type FindImplementationType()
-    {
-        var stackTrace = new System.Diagnostics.StackTrace();
-        for (int i = 0; i < stackTrace.FrameCount; i++)
-        {
-            var method = stackTrace.GetFrame(i)?.GetMethod();
-            var declaringType = method?.DeclaringType;
-
-            if (declaringType != null &&
-                !declaringType.IsAbstract &&
-                typeof(Projection<TView>).IsAssignableFrom(declaringType))
-            {
-                return declaringType;
-            }
-        }
-
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                var types = assembly.GetTypes()
-                    .Where(t => !t.IsAbstract && typeof(Projection<TView>).IsAssignableFrom(t));
-
-                var found = types.FirstOrDefault();
-                if (found != null)
-                    return found;
-            }
-            catch (ReflectionTypeLoadException)
-            {
-                // Skip
-            }
-        }
-
-        throw new InvalidOperationException("Could not determine Projection implementation type");
-    }
-
     private record ProjectionInfo(string Name, string[]? AggregateTypes, string[]? EventTypes);
 }
