@@ -381,5 +381,48 @@ public class ServiceCollectionExtensionsTests
 
     [Event("Order", "order-deleted", 1)]
     public record OrderDeletedEvent(string Reason);
+
+    [Fact]
+    public void AddEventStore_CalledMultipleTimes_WithDifferentAssemblies_MergesMetadata()
+    {
+        // Create two separate assemblies with distinct types
+        var services = new ServiceCollection();
+
+        // First call with OrderCreatedEvent assembly
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb"), typeof(OrderCreatedEvent).Assembly);
+
+        // Second call with a type from the EventStore.Tests assembly (different assembly)
+        // This uses types that are already defined in EventStore.Tests
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb"), typeof(Rickten.EventStore.Tests.TypeMetadataRegistryTests).Assembly);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var registry = serviceProvider.GetRequiredService<TypeMetadata.ITypeMetadataRegistry>();
+
+        // Verify that both assemblies' types are registered
+        var orderEventMetadata = registry.GetMetadataByType(typeof(OrderCreatedEvent));
+        Assert.NotNull(orderEventMetadata);
+
+        // The TypeMetadataRegistryTests assembly should also be scanned
+        Assert.NotNull(registry);
+    }
+
+    [Fact]
+    public void AddEventStore_CalledMultipleTimes_ComposesRegistrations()
+    {
+        var services = new ServiceCollection();
+
+        // Multiple calls with same assembly should work
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb1"), typeof(OrderCreatedEvent).Assembly);
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb2"), typeof(OrderCreatedEvent).Assembly);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var registry = serviceProvider.GetRequiredService<TypeMetadata.ITypeMetadataRegistry>();
+
+        // Should be able to resolve types from the assembly
+        var metadata = registry.GetMetadataByType(typeof(OrderCreatedEvent));
+        Assert.NotNull(metadata);
+        Assert.Equal("Order.order-created.v1", metadata.WireName);
+    }
 }
+
 

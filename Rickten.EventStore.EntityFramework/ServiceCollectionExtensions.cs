@@ -47,11 +47,36 @@ public static class ServiceCollectionExtensions
                 nameof(assemblies));
         }
 
-        // Register type metadata registry as singleton
-        services.TryAddSingleton<ITypeMetadataRegistry>(sp =>
+        // Register type metadata registry as singleton with merging support
+        // Get or create the assembly collection
+        var registryAssemblies = services
+            .Where(sd => sd.ServiceType == typeof(TypeMetadataRegistryAssemblies))
+            .Select(sd => sd.ImplementationInstance as TypeMetadataRegistryAssemblies)
+            .FirstOrDefault();
+
+        if (registryAssemblies == null)
         {
+            registryAssemblies = new TypeMetadataRegistryAssemblies();
+            services.AddSingleton(registryAssemblies);
+        }
+
+        // Add new assemblies to the collection
+        registryAssemblies.AddAssemblies(assemblies);
+
+        // Register or replace the registry factory
+        // Remove existing registry registration if present
+        var existingRegistryDescriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(ITypeMetadataRegistry));
+        if (existingRegistryDescriptor != null)
+        {
+            services.Remove(existingRegistryDescriptor);
+        }
+
+        // Add new registry registration that uses all accumulated assemblies
+        services.AddSingleton<ITypeMetadataRegistry>(sp =>
+        {
+            var assembliesCollection = sp.GetRequiredService<TypeMetadataRegistryAssemblies>();
             var builder = new TypeMetadataRegistryBuilder();
-            builder.AddAssemblies(assemblies);
+            builder.AddAssemblies(assembliesCollection.GetAssemblies());
             return builder.Build();
         });
 
@@ -271,5 +296,33 @@ public static class ServiceCollectionExtensions
         Action<Microsoft.EntityFrameworkCore.Infrastructure.SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
     {
         return services.AddEventStoreSqlServer(connectionString, new[] { typeof(TMarker1).Assembly, typeof(TMarker2).Assembly, typeof(TMarker3).Assembly }, sqlServerOptionsAction);
+    }
+}
+
+/// <summary>
+/// Internal helper class to accumulate assemblies across multiple AddEventStore calls.
+/// </summary>
+internal sealed class TypeMetadataRegistryAssemblies
+{
+    private readonly HashSet<Assembly> _assemblies = new();
+    private readonly object _lock = new();
+
+    public void AddAssemblies(IEnumerable<Assembly> assemblies)
+    {
+        lock (_lock)
+        {
+            foreach (var assembly in assemblies)
+            {
+                _assemblies.Add(assembly);
+            }
+        }
+    }
+
+    public IEnumerable<Assembly> GetAssemblies()
+    {
+        lock (_lock)
+        {
+            return _assemblies.ToArray();
+        }
     }
 }
