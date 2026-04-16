@@ -87,6 +87,24 @@ dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 ```
 
+### ⚠️ Type Registration Requirement
+
+The event store uses a **type metadata registry** built at startup for efficient type resolution without runtime assembly scanning. You must register assemblies containing your events, aggregates, and commands:
+
+```csharp
+// Register assemblies when configuring the event store
+services.AddEventStoreSqlServer(
+    connectionString,
+    typeof(MyEvent).Assembly,        // Assembly with events
+    typeof(MyAggregate).Assembly);   // Assembly with aggregates (if different)
+
+// Or use AddEventStoreInMemory for testing
+services.AddEventStoreInMemory(
+    typeof(MyEvent).Assembly);
+```
+
+If you don't specify assemblies, only the calling assembly is registered by default.
+
 ## ⚡ Quick Start
 
 ### 1. Define Your Events
@@ -118,12 +136,15 @@ using Rickten.EventStore.EntityFramework;
 var builder = WebApplication.CreateBuilder(args);
 
 // Option 1: Register all stores together (simple scenario)
+// Pass assemblies containing your events, aggregates, and commands
 builder.Services.AddEventStoreSqlServer(
-    builder.Configuration.GetConnectionString("EventStore"));
+    builder.Configuration.GetConnectionString("EventStore"),
+    typeof(OrderCreatedEvent).Assembly);  // Register assemblies with event types
 
 // Option 2: Register stores separately (advanced scenario)
 builder.Services.AddEventStoreOnly(options => 
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Events")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Events")),
+    typeof(OrderCreatedEvent).Assembly);  // Assemblies required here too
 
 builder.Services.AddSnapshotStoreOnly(options => 
     options.UseSqlServer(builder.Configuration.GetConnectionString("Snapshots")));

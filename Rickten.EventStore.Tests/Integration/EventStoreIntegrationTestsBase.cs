@@ -2,6 +2,7 @@ using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
+using Rickten.EventStore.TypeMetadata;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,8 @@ namespace Rickten.EventStore.Tests.Integration;
 /// </summary>
 public abstract class EventStoreIntegrationTestsBase
 {
+    private static readonly ITypeMetadataRegistry Registry = TestTypeMetadataRegistry.Create();
+
     /// <summary>
     /// Gets the aggregate type name to use for test events.
     /// Each provider must use a unique aggregate name to avoid event type conflicts.
@@ -47,8 +50,8 @@ public abstract class EventStoreIntegrationTestsBase
     /// </summary>
     protected abstract void AssertProductCreatedEvent(object evt, string expectedName, decimal expectedPrice);
 
-    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext());
-    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext());
+    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry);
+    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext(), Registry);
 
     [SkippableFact]
     public async Task ValueGeneratedOnAdd_AssignsSequentialIds()

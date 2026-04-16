@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -99,7 +100,7 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
         
-        services.AddEventStoreSqlServer("Server=localhost;Database=EventStore;");
+        services.AddEventStoreSqlServer("Server=localhost;Database=EventStore;", Array.Empty<Assembly>());
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -116,7 +117,7 @@ public class ServiceCollectionExtensionsTests
     public async Task AddEventStore_StoresWorkCorrectly()
     {
         var services = new ServiceCollection();
-        services.AddEventStoreInMemory(Guid.NewGuid().ToString());
+        services.AddEventStoreInMemory(Guid.NewGuid().ToString(), typeof(OrderCreatedEvent).Assembly);
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -174,7 +175,7 @@ public class ServiceCollectionExtensionsTests
 
         Assert.Throws<ArgumentNullException>(() =>
         {
-            services.AddEventStoreSqlServer(null!);
+            services.AddEventStoreSqlServer(null!, Array.Empty<Assembly>());
         });
     }
 

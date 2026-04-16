@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework.Entities;
 using Rickten.EventStore.EntityFramework.Serialization;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore.EntityFramework;
 
@@ -11,14 +12,17 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class EventStore : IEventStore
 {
     private readonly EventStoreDbContext _context;
+    private readonly Serializer<EventAttribute> _eventSerializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EventStore"/> class.
     /// </summary>
     /// <param name="context">The database context.</param>
-    public EventStore(EventStoreDbContext context)
+    /// <param name="registry">The type metadata registry.</param>
+    public EventStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _eventSerializer = new Serializer<EventAttribute>(registry);
     }
 
     /// <inheritdoc />
@@ -134,8 +138,8 @@ public sealed class EventStore : IEventStore
                 StreamType = expectedVersion.Stream.StreamType,
                 StreamIdentifier = expectedVersion.Stream.Identifier,
                 Version = version,
-                EventType = Serializer<EventAttribute>.GetTypeName(appendEvent.Event),
-                EventData = Serializer<EventAttribute>.Serialize(appendEvent.Event),
+                EventType = _eventSerializer.GetTypeName(appendEvent.Event),
+                EventData = _eventSerializer.Serialize(appendEvent.Event),
                 Metadata = Serializer.Serialize(metadata.ToArray()),
                 CreatedAt = DateTime.UtcNow
             };
@@ -169,13 +173,13 @@ public sealed class EventStore : IEventStore
         return loadedEvents.Select(MapToStreamEvent).ToList();
     }
 
-    private static StreamEvent MapToStreamEvent(EventEntity entity)
+    private StreamEvent MapToStreamEvent(EventEntity entity)
     {
         var streamPointer = new StreamPointer(
             new StreamIdentifier(entity.StreamType, entity.StreamIdentifier),
             entity.Version);
 
-        var eventData = Serializer<EventAttribute>.Deserialize(entity.EventData, entity.EventType);
+        var eventData = _eventSerializer.Deserialize(entity.EventData, entity.EventType);
         var metadata = Serializer.Deserialize<EventMetadata[]>(entity.Metadata);
 
         return new StreamEvent(

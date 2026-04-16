@@ -2,15 +2,19 @@ using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
+using Rickten.EventStore.TypeMetadata;
 using Rickten.Aggregator;
 using System;
 using System.Threading.Tasks;
+using Rickten.EventStore.Tests;
 
 [Aggregate("Order")]
 public record OrderState(string Status);
 
 public class SnapshotStoreTests
 {
+    private static readonly ITypeMetadataRegistry Registry = TestTypeMetadataRegistry.Create();
+
     private EventStoreDbContext CreateContext(string dbName)
     {
         var options = new DbContextOptionsBuilder<EventStoreDbContext>()
@@ -19,7 +23,7 @@ public class SnapshotStoreTests
         return new EventStoreDbContext(options);
     }
 
-    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName));
+    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), Registry);
 
     [Fact]
     public async Task SaveAndLoadSnapshot_Works()

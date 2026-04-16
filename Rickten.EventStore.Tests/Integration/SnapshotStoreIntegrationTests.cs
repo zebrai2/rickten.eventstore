@@ -2,6 +2,7 @@ using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
+using Rickten.EventStore.TypeMetadata;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,6 +26,8 @@ public record OrderStatusChangedEvent(string NewStatus);
 /// </summary>
 public class SnapshotStoreIntegrationTests : IDisposable
 {
+    private static readonly ITypeMetadataRegistry Registry = TestTypeMetadataRegistry.Create();
+
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<EventStoreDbContext> _options;
 
@@ -47,8 +50,8 @@ public class SnapshotStoreIntegrationTests : IDisposable
     }
 
     private EventStoreDbContext CreateContext() => new EventStoreDbContext(_options);
-    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext());
-    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext());
+    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry);
+    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext(), Registry);
 
     [Fact]
     public async Task SnapshotRestore_LoadsFromSnapshotThenAppliesNewEvents()

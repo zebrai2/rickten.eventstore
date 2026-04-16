@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore.EntityFramework.Serialization;
 
@@ -8,7 +9,7 @@ namespace Rickten.EventStore.EntityFramework.Serialization;
 /// Serializer for aggregate state objects.
 /// States must be decorated with [Aggregate] attribute.
 /// </summary>
-public static class StateSerializer
+public sealed class StateSerializer
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -17,12 +18,17 @@ public static class StateSerializer
         WriteIndented = false
     };
 
-    private static readonly Dictionary<string, Type> TypeCache = new();
+    private readonly ITypeMetadataRegistry _registry;
+
+    public StateSerializer(ITypeMetadataRegistry registry)
+    {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+    }
 
     /// <summary>
     /// Serializes a state object to JSON.
     /// </summary>
-    public static string Serialize(object state)
+    public string Serialize(object state)
     {
         return JsonSerializer.Serialize(state, JsonOptions);
     }
@@ -30,7 +36,7 @@ public static class StateSerializer
     /// <summary>
     /// Deserializes JSON to a state object by type name.
     /// </summary>
-    public static object Deserialize(string json, string typeName)
+    public object Deserialize(string json, string typeName)
     {
         var type = ResolveType(typeName);
         return JsonSerializer.Deserialize(json, type, JsonOptions)
@@ -42,21 +48,14 @@ public static class StateSerializer
     /// Format: "AggregateName.TypeName"
     /// Falls back to FullName for backward compatibility.
     /// </summary>
-    public static string GetTypeName(object state)
+    public string GetTypeName(object state)
     {
         var type = state.GetType();
+        var metadata = _registry.GetMetadataByType(type);
 
-        // Try to find [Aggregate] attribute using reflection (avoid assembly reference)
-        var aggregateAttribute = type.GetCustomAttributes(inherit: false)
-            .FirstOrDefault(attr => attr.GetType().Name == "AggregateAttribute");
-
-        if (aggregateAttribute != null)
+        if (metadata != null && metadata.AttributeType.Name == "AggregateAttribute")
         {
-            var aggregateName = aggregateAttribute.GetType().GetProperty("Name")?.GetValue(aggregateAttribute) as string;
-            if (aggregateName != null)
-            {
-                return $"{aggregateName}.{type.Name}";
-            }
+            return metadata.WireName;
         }
 
         // Fallback to FullName for backward compatibility (states without [Aggregate])
@@ -68,25 +67,25 @@ public static class StateSerializer
     /// Resolves a type from its type name.
     /// Supports both "Aggregate.TypeName" format and FullName fallback.
     /// </summary>
-    private static Type ResolveType(string typeName)
+    private Type ResolveType(string typeName)
     {
-        if (TypeCache.TryGetValue(typeName, out var cachedType))
+        // Try registry first
+        var type = _registry.GetTypeByWireName(typeName);
+        if (type != null)
         {
-            return cachedType;
+            return type;
         }
 
+        // Fallback: try as type FullName (for backward compatibility)
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-
-        // First, try as type FullName (for backward compatibility)
         foreach (var assembly in assemblies)
         {
             try
             {
-                var type = assembly.GetType(typeName);
-                if (type != null)
+                var fallbackType = assembly.GetType(typeName);
+                if (fallbackType != null)
                 {
-                    TypeCache[typeName] = type;
-                    return type;
+                    return fallbackType;
                 }
             }
             catch (Exception)
@@ -95,38 +94,7 @@ public static class StateSerializer
             }
         }
 
-        // Try to resolve by [Aggregate] attribute
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                foreach (var type in assembly.GetTypes())
-                {
-                    var aggregateAttribute = type.GetCustomAttributes(inherit: false)
-                        .FirstOrDefault(attr => attr.GetType().Name == "AggregateAttribute");
-
-                    if (aggregateAttribute != null)
-                    {
-                        var aggregateName = aggregateAttribute.GetType().GetProperty("Name")?.GetValue(aggregateAttribute) as string;
-                        if (aggregateName != null)
-                        {
-                            var aggregateTypeName = $"{aggregateName}.{type.Name}";
-                            if (aggregateTypeName == typeName)
-                            {
-                                TypeCache[typeName] = type;
-                                return type;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (ReflectionTypeLoadException)
-            {
-                // Skip assemblies that can't be loaded
-            }
-        }
-
         throw new InvalidOperationException(
-            $"Cannot resolve state type '{typeName}'. Ensure the type is loaded in the current AppDomain.");
+            $"Cannot resolve state type '{typeName}'. Ensure the type is registered in the ITypeMetadataRegistry or is a valid FullName.");
     }
 }

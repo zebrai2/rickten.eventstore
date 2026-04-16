@@ -2,11 +2,13 @@ using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
+using Rickten.EventStore.TypeMetadata;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Rickten.EventStore.Tests;
 
 [Event("Order", "Created", 1)]
 public record OrderCreatedEvent(decimal Amount);
@@ -19,6 +21,8 @@ public record InvoiceCreatedEvent(decimal Total);
 
 public class EventStoreTests
 {
+    private static readonly ITypeMetadataRegistry Registry = TestTypeMetadataRegistry.Create();
+
     private EventStoreDbContext CreateContext(string dbName)
     {
         var options = new DbContextOptionsBuilder<EventStoreDbContext>()
@@ -27,7 +31,7 @@ public class EventStoreTests
         return new EventStoreDbContext(options);
     }
 
-    private EventStore CreateStore(string dbName) => new EventStore(CreateContext(dbName));
+    private EventStore CreateStore(string dbName) => new EventStore(CreateContext(dbName), Registry);
 
     private StreamPointer MakePointer(string streamType, string streamId, long version) =>
         new StreamPointer(new StreamIdentifier(streamType, streamId), version);

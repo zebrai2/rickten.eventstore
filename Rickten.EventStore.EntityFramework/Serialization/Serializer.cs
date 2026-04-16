@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore.EntityFramework.Serialization;
 
@@ -9,7 +10,7 @@ namespace Rickten.EventStore.EntityFramework.Serialization;
 /// based on attribute metadata.
 /// </summary>
 /// <typeparam name="TAttribute">The attribute type used for type name resolution.</typeparam>
-public static class Serializer<TAttribute> where TAttribute : Attribute
+public sealed class Serializer<TAttribute> where TAttribute : Attribute
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -18,12 +19,17 @@ public static class Serializer<TAttribute> where TAttribute : Attribute
         WriteIndented = false
     };
 
-    private static readonly Dictionary<string, Type> TypeCache = new();
+    private readonly ITypeMetadataRegistry _registry;
+
+    public Serializer(ITypeMetadataRegistry registry)
+    {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+    }
 
     /// <summary>
     /// Serializes an object to JSON.
     /// </summary>
-    public static string Serialize(object obj)
+    public string Serialize(object obj)
     {
         return JsonSerializer.Serialize(obj, JsonOptions);
     }
@@ -31,7 +37,7 @@ public static class Serializer<TAttribute> where TAttribute : Attribute
     /// <summary>
     /// Deserializes JSON to an object of the specified type.
     /// </summary>
-    public static object Deserialize(string json, string typeName)
+    public object Deserialize(string json, string typeName)
     {
         var type = ResolveType(typeName);
         return JsonSerializer.Deserialize(json, type, JsonOptions)
@@ -41,7 +47,7 @@ public static class Serializer<TAttribute> where TAttribute : Attribute
     /// <summary>
     /// Deserializes JSON to a known type.
     /// </summary>
-    public static T Deserialize<T>(string json)
+    public T Deserialize<T>(string json)
     {
         return JsonSerializer.Deserialize<T>(json, JsonOptions)
             ?? throw new InvalidOperationException($"Failed to deserialize to type '{typeof(T).FullName}'");
@@ -50,123 +56,37 @@ public static class Serializer<TAttribute> where TAttribute : Attribute
     /// <summary>
     /// Gets the type name from an object using the attribute metadata.
     /// </summary>
-    public static string GetTypeName(object obj)
+    public string GetTypeName(object obj)
     {
         var type = obj.GetType();
-        var attribute = type.GetCustomAttribute<TAttribute>();
+        var metadata = _registry.GetMetadataByType(type);
 
-        if (attribute == null)
+        if (metadata != null && metadata.AttributeType == typeof(TAttribute))
         {
-            throw new InvalidOperationException(
-                $"Type '{type.FullName}' must be decorated with [{typeof(TAttribute).Name}] attribute.");
+            return metadata.WireName;
         }
 
-        return GetTypeNameFromAttribute(type, attribute);
+        throw new InvalidOperationException(
+            $"Type '{type.FullName}' must be decorated with [{typeof(TAttribute).Name}] attribute and registered in the ITypeMetadataRegistry.");
     }
 
     /// <summary>
     /// Resolves a type from its attribute-based name.
     /// </summary>
-    private static Type ResolveType(string typeName)
+    private Type ResolveType(string typeName)
     {
-        if (TypeCache.TryGetValue(typeName, out var cachedType))
+        var type = _registry.GetTypeByWireName(typeName);
+        if (type != null)
         {
-            return cachedType;
-        }
-
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        foreach (var assembly in assemblies)
-        {
-            try
+            var metadata = _registry.GetMetadataByType(type);
+            if (metadata != null && metadata.AttributeType == typeof(TAttribute))
             {
-                foreach (var type in assembly.GetTypes())
-                {
-                    var attribute = type.GetCustomAttribute<TAttribute>();
-                    if (attribute != null)
-                    {
-                        var attributeTypeName = GetTypeNameFromAttribute(type, attribute);
-                        if (attributeTypeName == typeName)
-                        {
-                            TypeCache[typeName] = type;
-                            return type;
-                        }
-                    }
-                }
-            }
-            catch (ReflectionTypeLoadException)
-            {
-                // Skip assemblies that can't be loaded
+                return type;
             }
         }
 
         throw new InvalidOperationException(
-            $"Cannot resolve type '{typeName}'. Ensure the type is decorated with [{typeof(TAttribute).Name}] attribute and loaded in the current AppDomain.");
-    }
-
-    /// <summary>
-    /// Gets the type name from an attribute. Override this for different naming schemes.
-    /// </summary>
-    private static string GetTypeNameFromAttribute(Type type, TAttribute attribute)
-    {
-        // Use reflection to get the naming strategy based on attribute properties
-        return attribute switch
-        {
-            // EventAttribute: "Aggregate.Name.vVersion"
-            _ when typeof(TAttribute).Name == "EventAttribute" =>
-                GetEventTypeName(type, attribute),
-
-            // AggregateAttribute: "AggregateName.TypeName"
-            _ when typeof(TAttribute).Name == "AggregateAttribute" =>
-                GetAggregateTypeName(type, attribute),
-
-            // ProjectionAttribute: "ProjectionName.TypeName"
-            _ when typeof(TAttribute).Name == "ProjectionAttribute" =>
-                GetProjectionTypeName(type, attribute),
-
-            // Fallback: use FullName
-            _ => type.FullName ?? throw new InvalidOperationException($"Type '{type}' has no FullName")
-        };
-    }
-
-    private static string GetEventTypeName(Type type, TAttribute attribute)
-    {
-        var aggregate = attribute.GetType().GetProperty("Aggregate")?.GetValue(attribute) as string;
-        var name = attribute.GetType().GetProperty("Name")?.GetValue(attribute) as string;
-        var version = attribute.GetType().GetProperty("Version")?.GetValue(attribute);
-
-        if (aggregate == null || name == null || version == null)
-        {
-            throw new InvalidOperationException(
-                $"EventAttribute on type '{type.FullName}' must have Aggregate, Name, and Version properties.");
-        }
-
-        return $"{aggregate}.{name}.v{version}";
-    }
-
-    private static string GetAggregateTypeName(Type type, TAttribute attribute)
-    {
-        var aggregateName = attribute.GetType().GetProperty("Name")?.GetValue(attribute) as string;
-
-        if (aggregateName == null)
-        {
-            throw new InvalidOperationException(
-                $"AggregateAttribute on type '{type.FullName}' must have a Name property.");
-        }
-
-        return $"{aggregateName}.{type.Name}";
-    }
-
-    private static string GetProjectionTypeName(Type type, TAttribute attribute)
-    {
-        var projectionName = attribute.GetType().GetProperty("Name")?.GetValue(attribute) as string;
-
-        if (projectionName == null)
-        {
-            throw new InvalidOperationException(
-                $"ProjectionAttribute on type '{type.FullName}' must have a Name property.");
-        }
-
-        return $"{projectionName}.{type.Name}";
+            $"Cannot resolve type '{typeName}'. Ensure the type is decorated with [{typeof(TAttribute).Name}] attribute and registered in the ITypeMetadataRegistry.");
     }
 }
 

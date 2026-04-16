@@ -31,6 +31,7 @@ public interface ICommandDecider<TState, TCommand>
 
 **StateFolder<TState>** - Abstract base class that:
 - **Requires `[Aggregate]` attribute** for validation
+- **Requires `ITypeMetadataRegistry` constructor parameter** for event type discovery and validation
 - **Uses explicit handler methods**: Define `protected TState When(EventType e, TState state)` for each event
 - **Validates event coverage by default**: Ensures all events have handlers (opt-out with `ValidateEventCoverage = false`)
 - Handles null event checks automatically
@@ -146,6 +147,36 @@ public abstract record SessionReviewEvent
 
     [Event("SessionReview", "InteractionRecorded", 1)]
     public sealed record InteractionRecorded(string InteractionId, string Type, string Content, DateTime RecordedAt) : SessionReviewEvent;
+}
+```
+
+### 3. Define Your State Folder
+
+```csharp
+using Rickten.EventStore;
+using Rickten.Aggregator;
+
+[Aggregate("SessionReview")]
+public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+{
+    // Inject the type metadata registry
+    public SessionReviewStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
+
+    public override SessionReviewState InitialState() => new();
+
+    protected override SessionReviewState When(SessionStarted e, SessionReviewState state) =>
+        state with { SessionId = e.SessionId, UserId = e.UserId, StartedAt = e.StartedAt };
+
+    protected override SessionReviewState When(InteractionRecorded e, SessionReviewState state) =>
+        state with { Interactions = state.Interactions.Add(e) };
+}
+
+public sealed record SessionReviewState
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string UserId { get; init; } = string.Empty;
+    public DateTime? StartedAt { get; init; }
+    public ImmutableList<SessionReviewEvent.InteractionRecorded> Interactions { get; init; } = ImmutableList<SessionReviewEvent.InteractionRecorded>.Empty;
 }
 ```
 

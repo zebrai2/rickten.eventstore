@@ -1,4 +1,5 @@
 using Rickten.EventStore;
+using Rickten.EventStore.TypeMetadata;
 using System.Reflection;
 
 namespace Rickten.Aggregator;
@@ -13,6 +14,7 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, AggregateInfo> _aggregateInfoCache = new();
     private readonly AggregateInfo _info;
+    private readonly ITypeMetadataRegistry _registry;
 
     /// <summary>
     /// Override to explicitly declare events that should be ignored during validation.
@@ -26,8 +28,10 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
     /// </summary>
     public int SnapshotInterval => _info.SnapshotInterval;
 
-    protected StateFolder()
+    protected StateFolder(ITypeMetadataRegistry registry)
     {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+
         var folderType = GetType();
         _info = _aggregateInfoCache.GetOrAdd(folderType, type =>
         {
@@ -36,7 +40,7 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
                     $"State type '{stateType.Name}' must be decorated with [Aggregate] attribute. " +
                     $"Add [Aggregate(\"YourAggregateName\")] to your state record/class.");
 
-            var allEvents = ScanEventsForAggregate(attr.Name);
+            var allEvents = GetEventsForAggregate(attr.Name);
             var handlers = ScanEventHandlers(folderType);
             var validateCoverage = attr.ValidateEventCoverage;
 
@@ -93,31 +97,9 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
         }
     }
 
-    private static HashSet<Type> ScanEventsForAggregate(string aggregateName)
+    private HashSet<Type> GetEventsForAggregate(string aggregateName)
     {
-        var events = new HashSet<Type>();
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                var types = assembly.GetTypes()
-                    .Where(t => t.GetCustomAttribute<EventAttribute>() is EventAttribute attr 
-                             && attr.Aggregate == aggregateName);
-
-                foreach (var type in types)
-                {
-                    events.Add(type);
-                }
-            }
-            catch (ReflectionTypeLoadException)
-            {
-                // Skip assemblies that can't be loaded
-            }
-        }
-
-        return events;
+        return _registry.GetEventTypesForAggregate(aggregateName).ToHashSet();
     }
 
     private static Dictionary<Type, MethodInfo> ScanEventHandlers(Type implementationType)

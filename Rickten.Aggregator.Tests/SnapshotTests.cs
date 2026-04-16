@@ -24,7 +24,8 @@ public class SnapshotTests
     [Fact]
     public void StateFolder_ExposesSnapshotInterval()
     {
-        var folder = new TestStateFolder();
+        var registry = TestTypeMetadataRegistry.Create();
+        var folder = new TestStateFolder(registry);
         Assert.Equal(25, folder.SnapshotInterval);
     }
 
@@ -36,7 +37,8 @@ public class SnapshotTests
         using (var scope = serviceProvider.CreateScope())
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-            var folder = new TestStateFolder();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -63,7 +65,8 @@ public class SnapshotTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var folder = new NoSnapshotStateFolder();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new NoSnapshotStateFolder(registry);
             var decider = new NoSnapshotCommandDecider();
             var streamId = new StreamIdentifier("NoSnapshot", "1");
 
@@ -94,7 +97,8 @@ public class SnapshotTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var folder = new TestStateFolder(); // SnapshotInterval = 25
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry); // SnapshotInterval = 25
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -129,7 +133,8 @@ public class SnapshotTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var folder = new TestStateFolder(); // SnapshotInterval = 25
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry); // SnapshotInterval = 25
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -160,7 +165,8 @@ public class SnapshotTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var folder = new TestStateFolder();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -203,7 +209,8 @@ public class SnapshotTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var folder = new TestStateFolder();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -251,7 +258,8 @@ public class SnapshotTests
         using (var scope = serviceProvider.CreateScope())
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-            var folder = new TestStateFolder();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
@@ -293,6 +301,8 @@ public record TestIncremented;
 
 public class TestStateFolder : StateFolder<TestState>
 {
+    public TestStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) : base(registry) { }
+
     public override TestState InitialState() => new(0);
 
     protected TestState When(TestIncremented e, TestState state)
@@ -329,6 +339,8 @@ public record NoSnapshotIncremented;
 
 public class NoSnapshotStateFolder : StateFolder<NoSnapshotState>
 {
+    public NoSnapshotStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) : base(registry) { }
+
     public override NoSnapshotState InitialState() => new(0);
 
     protected NoSnapshotState When(NoSnapshotIncremented e, NoSnapshotState state)

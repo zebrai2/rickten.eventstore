@@ -23,6 +23,8 @@ public record AccountWithdrawnEvent(decimal Amount);
 /// </summary>
 public class ConcurrencyTests : IDisposable
 {
+    private static readonly EventStore.TypeMetadata.ITypeMetadataRegistry Registry = TestTypeMetadataRegistry.Create();
+
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<EventStoreDbContext> _options;
 
@@ -45,7 +47,7 @@ public class ConcurrencyTests : IDisposable
     }
 
     private EventStoreDbContext CreateContext() => new EventStoreDbContext(_options);
-    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext());
+    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry);
 
     [Fact]
     public async Task OptimisticConcurrency_DetectsVersionConflict()

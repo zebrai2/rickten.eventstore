@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework.Entities;
 using Rickten.EventStore.EntityFramework.Serialization;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore.EntityFramework;
 
@@ -11,14 +12,17 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class SnapshotStore : ISnapshotStore
 {
     private readonly EventStoreDbContext _context;
+    private readonly StateSerializer _stateSerializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SnapshotStore"/> class.
     /// </summary>
     /// <param name="context">The database context.</param>
-    public SnapshotStore(EventStoreDbContext context)
+    /// <param name="registry">The type metadata registry.</param>
+    public SnapshotStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _stateSerializer = new StateSerializer(registry);
     }
 
     /// <inheritdoc />
@@ -38,7 +42,7 @@ public sealed class SnapshotStore : ISnapshotStore
         }
 
         var streamPointer = new StreamPointer(streamIdentifier, entity.Version);
-        var state = StateSerializer.Deserialize(entity.State, entity.StateType);
+        var state = _stateSerializer.Deserialize(entity.State, entity.StateType);
 
         return new Snapshot(streamPointer, state);
     }
@@ -55,8 +59,8 @@ public sealed class SnapshotStore : ISnapshotStore
                   && s.StreamIdentifier == streamPointer.Stream.Identifier,
                 cancellationToken);
 
-        var serializedState = StateSerializer.Serialize(state);
-        var stateType = StateSerializer.GetTypeName(state);
+        var serializedState = _stateSerializer.Serialize(state);
+        var stateType = _stateSerializer.GetTypeName(state);
 
         if (entity == null)
         {

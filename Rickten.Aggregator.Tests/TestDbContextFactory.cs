@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Rickten.EventStore;
 using Rickten.EventStore.EntityFramework;
+using System.Reflection;
 
 namespace Rickten.Aggregator.Tests;
 
@@ -25,11 +26,11 @@ public static class TestServiceFactory
 
         var services = new ServiceCollection();
 
-        // Use the AddEventStore service installer with SQLite
+        // Use the AddEventStore service installer with SQLite, including test assemblies
         services.AddEventStore(options =>
         {
             options.UseSqlite(connection);
-        });
+        }, Assembly.GetExecutingAssembly());
 
         var serviceProvider = services.BuildServiceProvider();
 
