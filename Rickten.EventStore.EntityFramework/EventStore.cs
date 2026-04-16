@@ -134,9 +134,9 @@ public sealed class EventStore : IEventStore
                 StreamType = expectedVersion.Stream.StreamType,
                 StreamIdentifier = expectedVersion.Stream.Identifier,
                 Version = version,
-                EventType = EventSerializer.GetTypeName(appendEvent.Event),
-                EventData = EventSerializer.Serialize(appendEvent.Event),
-                Metadata = EventSerializer.Serialize(metadata.ToArray()),
+                EventType = Serializer<EventAttribute>.GetTypeName(appendEvent.Event),
+                EventData = Serializer<EventAttribute>.Serialize(appendEvent.Event),
+                Metadata = Serializer.Serialize(metadata.ToArray()),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -175,8 +175,8 @@ public sealed class EventStore : IEventStore
             new StreamIdentifier(entity.StreamType, entity.StreamIdentifier),
             entity.Version);
 
-        var eventData = EventSerializer.Deserialize(entity.EventData, entity.EventType);
-        var metadata = EventSerializer.Deserialize<EventMetadata[]>(entity.Metadata);
+        var eventData = Serializer<EventAttribute>.Deserialize(entity.EventData, entity.EventType);
+        var metadata = Serializer.Deserialize<EventMetadata[]>(entity.Metadata);
 
         return new StreamEvent(
             streamPointer,

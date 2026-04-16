@@ -99,20 +99,41 @@ internal static class EventSerializer
     }
 
     /// <summary>
-    /// Gets the type name from an object using EventAttribute.
+    /// Gets the type name from an object using EventAttribute or AggregateAttribute.
+    /// Events use [Event] ? "Aggregate.EventName.vVersion"
+    /// States use [Aggregate] ? "Aggregate.StateName"
+    /// Objects without attributes use FullName as fallback.
     /// </summary>
     public static string GetTypeName(object obj)
     {
         var type = obj.GetType();
-        var eventAttribute = type.GetCustomAttribute<EventAttribute>()
-            ?? throw new InvalidOperationException(
-                $"Event type '{type.FullName}' must be decorated with [Event] attribute.");
 
-        return $"{eventAttribute.Aggregate}.{eventAttribute.Name}.v{eventAttribute.Version}";
+        // Check for [Event] attribute first (for events)
+        var eventAttribute = type.GetCustomAttribute<EventAttribute>();
+        if (eventAttribute != null)
+        {
+            return $"{eventAttribute.Aggregate}.{eventAttribute.Name}.v{eventAttribute.Version}";
+        }
+
+        // Check for [Aggregate] attribute (for states) - use reflection to avoid assembly reference
+        var aggregateAttribute = type.GetCustomAttributes(inherit: false)
+            .FirstOrDefault(attr => attr.GetType().Name == "AggregateAttribute");
+        if (aggregateAttribute != null)
+        {
+            var aggregateName = aggregateAttribute.GetType().GetProperty("Name")?.GetValue(aggregateAttribute) as string;
+            if (aggregateName != null)
+            {
+                return $"{aggregateName}.{type.Name}";
+            }
+        }
+
+        // Fallback to FullName for objects without attributes
+        return type.FullName 
+            ?? throw new InvalidOperationException($"Type has no FullName");
     }
 
     /// <summary>
-    /// Resolves a type from its EventAttribute-based name.
+    /// Resolves a type from its EventAttribute-based name, AggregateAttribute-based name, or FullName.
     /// </summary>
     private static Type ResolveType(string typeName)
     {
@@ -122,20 +143,58 @@ internal static class EventSerializer
         }
 
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+        // First, try as type FullName (for backward compatibility)
+        foreach (var assembly in assemblies)
+        {
+            try
+            {
+                var type = assembly.GetType(typeName);
+                if (type != null)
+                {
+                    TypeCache[typeName] = type;
+                    return type;
+                }
+            }
+            catch (Exception)
+            {
+                // Skip assemblies that fail
+            }
+        }
+
+        // Try attribute-based resolution
         foreach (var assembly in assemblies)
         {
             try
             {
                 foreach (var type in assembly.GetTypes())
                 {
+                    // Check [Event] attribute
                     var eventAttribute = type.GetCustomAttribute<EventAttribute>();
                     if (eventAttribute != null)
                     {
-                        var attributeTypeName = $"{eventAttribute.Aggregate}.{eventAttribute.Name}.v{eventAttribute.Version}";
-                        if (attributeTypeName == typeName)
+                        var eventTypeName = $"{eventAttribute.Aggregate}.{eventAttribute.Name}.v{eventAttribute.Version}";
+                        if (eventTypeName == typeName)
                         {
                             TypeCache[typeName] = type;
                             return type;
+                        }
+                    }
+
+                    // Check [Aggregate] attribute (for states) - use reflection to avoid assembly reference
+                    var aggregateAttribute = type.GetCustomAttributes(inherit: false)
+                        .FirstOrDefault(attr => attr.GetType().Name == "AggregateAttribute");
+                    if (aggregateAttribute != null)
+                    {
+                        var aggregateName = aggregateAttribute.GetType().GetProperty("Name")?.GetValue(aggregateAttribute) as string;
+                        if (aggregateName != null)
+                        {
+                            var aggregateTypeName = $"{aggregateName}.{type.Name}";
+                            if (aggregateTypeName == typeName)
+                            {
+                                TypeCache[typeName] = type;
+                                return type;
+                            }
                         }
                     }
                 }
@@ -147,6 +206,6 @@ internal static class EventSerializer
         }
 
         throw new InvalidOperationException(
-            $"Cannot resolve event type '{typeName}'. Ensure the type is decorated with [Event] attribute and loaded in the current AppDomain.");
+            $"Cannot resolve type '{typeName}'. Ensure the type is loaded in the current AppDomain.");
     }
 }

@@ -35,7 +35,7 @@ public sealed class ProjectionStore : IProjectionStore
             return null;
         }
 
-        var state = EventSerializer.Deserialize<TState>(entity.State);
+        var state = Serializer.Deserialize<TState>(entity.State);
 
         return new Projection<TState>(state, entity.GlobalPosition);
     }
@@ -54,7 +54,7 @@ public sealed class ProjectionStore : IProjectionStore
                 p => p.ProjectionKey == projectionKey,
                 cancellationToken);
 
-        var serializedState = EventSerializer.Serialize(state);
+        var serializedState = Serializer.Serialize(state);
 
         if (entity == null)
         {

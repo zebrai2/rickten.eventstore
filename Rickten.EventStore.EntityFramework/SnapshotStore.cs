@@ -6,6 +6,7 @@ namespace Rickten.EventStore.EntityFramework;
 
 /// <summary>
 /// Entity Framework Core implementation of <see cref="ISnapshotStore"/>.
+/// States must be decorated with [Aggregate] attribute for type resolution.
 /// </summary>
 public sealed class SnapshotStore : ISnapshotStore
 {
@@ -37,7 +38,7 @@ public sealed class SnapshotStore : ISnapshotStore
         }
 
         var streamPointer = new StreamPointer(streamIdentifier, entity.Version);
-        var state = EventSerializer.Deserialize(entity.State, entity.StateType);
+        var state = StateSerializer.Deserialize(entity.State, entity.StateType);
 
         return new Snapshot(streamPointer, state);
     }
@@ -54,8 +55,8 @@ public sealed class SnapshotStore : ISnapshotStore
                   && s.StreamIdentifier == streamPointer.Stream.Identifier,
                 cancellationToken);
 
-        var serializedState = EventSerializer.Serialize(state);
-        var stateType = EventSerializer.GetTypeName(state);
+        var serializedState = StateSerializer.Serialize(state);
+        var stateType = StateSerializer.GetTypeName(state);
 
         if (entity == null)
         {

@@ -2,10 +2,11 @@ using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
+using Rickten.Aggregator;
 using System;
 using System.Threading.Tasks;
 
-[Event("Order", "State", 1)]
+[Aggregate("Order")]
 public record OrderState(string Status);
 
 public class SnapshotStoreTests

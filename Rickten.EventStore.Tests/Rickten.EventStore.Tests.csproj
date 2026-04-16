@@ -7,14 +7,21 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.5" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
     <PackageReference Include="xunit" Version="2.5.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.0" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
+    <PackageReference Include="Testcontainers.MsSql" Version="4.3.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.3.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Rickten.EventStore.EntityFramework\Rickten.EventStore.EntityFramework.csproj" />
+    <ProjectReference Include="..\Rickten.Aggregator\Rickten.Aggregator.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,11 +1,12 @@
 namespace Rickten.Aggregator;
 
 /// <summary>
-/// Marks a command decider or state folder as belonging to a specific aggregate.
-/// For StateFolders, validates that all aggregate events have When() handler methods by default.
+/// Marks a state type as belonging to a specific aggregate.
+/// For state types, this defines the aggregate identity, snapshot behavior, and event validation rules.
+/// For StateFolder classes, this can optionally override event coverage validation.
 /// </summary>
 /// <param name="name">The aggregate name (must match Event attribute aggregate names).</param>
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
 public sealed class AggregateAttribute(string name) : Attribute
 {
     /// <summary>

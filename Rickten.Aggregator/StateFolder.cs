@@ -5,7 +5,8 @@ namespace Rickten.Aggregator;
 
 /// <summary>
 /// Abstract base class for state folders using explicit event handler methods.
-/// Requires [Aggregate] attribute. Define handlers as: protected TState When(EventType e, TState state).
+/// The state type TState must be decorated with [Aggregate] attribute.
+/// Define handlers as: protected TState When(EventType e, TState state).
 /// </summary>
 /// <typeparam name="TState">The aggregate state type.</typeparam>
 public abstract class StateFolder<TState> : IStateFolder<TState>
@@ -20,23 +21,33 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
     protected virtual ISet<Type> IgnoredEvents => new HashSet<Type>();
 
     /// <summary>
-    /// Gets the snapshot interval for this aggregate from the [Aggregate] attribute.
+    /// Gets the snapshot interval for this aggregate from the [Aggregate] attribute on TState.
     /// Returns 0 if no automatic snapshots are configured.
     /// </summary>
     public int SnapshotInterval => _info.SnapshotInterval;
 
     protected StateFolder()
     {
-        var implementationType = GetType();
-        _info = _aggregateInfoCache.GetOrAdd(implementationType, type =>
+        var folderType = GetType();
+        _info = _aggregateInfoCache.GetOrAdd(folderType, type =>
         {
-            var attr = type.GetCustomAttribute<AggregateAttribute>() ?? throw new InvalidOperationException(
-                    $"StateFolder implementation '{type.Name}' must be decorated with [Aggregate] attribute. " +
-                    $"Add [Aggregate(\"YourAggregateName\")] to your class.");
+            var stateType = typeof(TState);
+            var attr = stateType.GetCustomAttribute<AggregateAttribute>() ?? throw new InvalidOperationException(
+                    $"State type '{stateType.Name}' must be decorated with [Aggregate] attribute. " +
+                    $"Add [Aggregate(\"YourAggregateName\")] to your state record/class.");
 
             var allEvents = ScanEventsForAggregate(attr.Name);
-            var handlers = ScanEventHandlers(type);
-            return new AggregateInfo(attr.Name, attr.ValidateEventCoverage, attr.SnapshotInterval, allEvents, handlers);
+            var handlers = ScanEventHandlers(folderType);
+            var validateCoverage = attr.ValidateEventCoverage;
+
+            // Allow folder to override validation setting
+            var folderAttr = folderType.GetCustomAttribute<AggregateAttribute>();
+            if (folderAttr != null)
+            {
+                validateCoverage = folderAttr.ValidateEventCoverage;
+            }
+
+            return new AggregateInfo(attr.Name, validateCoverage, attr.SnapshotInterval, allEvents, handlers);
         });
 
         if (_info.ValidateEventCoverage)

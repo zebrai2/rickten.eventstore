@@ -60,6 +60,7 @@ public class ValidationTests
 }
 
 // Test domain
+[Aggregate("Validation")]
 public record ValidationState(bool WasHandled = false);
 
 [Event("Validation", "Handled", 1)]
@@ -69,7 +70,6 @@ public record HandledEvent;
 public record MissingEvent;
 
 // Incomplete: missing handler for MissingEvent
-[Aggregate("Validation")]
 public class IncompleteStateFolder : StateFolder<ValidationState>
 {
     public override ValidationState InitialState() => new();
@@ -82,7 +82,6 @@ public class IncompleteStateFolder : StateFolder<ValidationState>
 }
 
 // Complete: has all handlers
-[Aggregate("Validation")]
 public class CompleteStateFolder : StateFolder<ValidationState>
 {
     public override ValidationState InitialState() => new();
@@ -98,7 +97,7 @@ public class CompleteStateFolder : StateFolder<ValidationState>
     }
 }
 
-// Validation disabled
+// Validation disabled - can override on folder
 [Aggregate("Validation", ValidateEventCoverage = false)]
 public class NoValidationStateFolder : StateFolder<ValidationState>
 {
@@ -108,11 +107,10 @@ public class NoValidationStateFolder : StateFolder<ValidationState>
     {
         return state with { WasHandled = true };
     }
-    // Missing handler is OK because validation is disabled
+    // Missing handler is OK because validation is disabled on folder
 }
 
 // Uses IgnoredEvents
-[Aggregate("Validation")]
 public class IgnoredEventsStateFolder : StateFolder<ValidationState>
 {
     protected override ISet<Type> IgnoredEvents => new HashSet<Type> { typeof(MissingEvent) };
