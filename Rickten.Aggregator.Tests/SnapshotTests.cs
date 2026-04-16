@@ -311,7 +311,6 @@ public class TestStateFolder : StateFolder<TestState>
     }
 }
 
-[Aggregate("Test")]
 public class TestCommandDecider : CommandDecider<TestState, TestCommand>
 {
     protected override IReadOnlyList<object> ExecuteCommand(TestState state, TestCommand command)
@@ -349,7 +348,6 @@ public class NoSnapshotStateFolder : StateFolder<NoSnapshotState>
     }
 }
 
-[Aggregate("NoSnapshot")]
 public class NoSnapshotCommandDecider : CommandDecider<NoSnapshotState, NoSnapshotCommand>
 {
     protected override IReadOnlyList<object> ExecuteCommand(NoSnapshotState state, NoSnapshotCommand command)
