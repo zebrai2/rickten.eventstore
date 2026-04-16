@@ -30,7 +30,7 @@ public interface ICommandDecider<TState, TCommand>
 ### Base Classes (Recommended)
 
 **StateFolder<TState>** - Abstract base class that:
-- **Requires `[Aggregate]` attribute** for validation
+- **Requires `[Aggregate]` attribute on state type TState** for validation
 - **Requires `ITypeMetadataRegistry` constructor parameter** for event type discovery and validation
 - **Uses explicit handler methods**: Define `protected TState When(EventType e, TState state)` for each event
 - **Validates event coverage by default**: Ensures all events have handlers (opt-out with `ValidateEventCoverage = false`)
@@ -39,7 +39,7 @@ public interface ICommandDecider<TState, TCommand>
 - Provides `IgnoredEvents` property to exclude specific events from validation
 
 **CommandDecider<TState, TCommand>** - Abstract base class that:
-- **Requires `[Aggregate]` attribute** for validation
+- **Requires `[Aggregate]` attribute on state type TState** for validation
 - Validates commands belong to the aggregate (via `[Command]` attribute)
 - Validates produced events match the aggregate
 - Separates validation from event production
@@ -66,19 +66,25 @@ public static class StateRunner
 
 ### [Aggregate]
 
-Required on all `StateFolder` and `CommandDecider` implementations:
+Required on the state type used by `StateFolder` and `CommandDecider`:
 
 ```csharp
 [Aggregate("SessionReview")]
-public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+public sealed record SessionReviewState
 {
+    public string SessionId { get; init; } = string.Empty;
+    public string UserId { get; init; } = string.Empty;
     // ...
 }
 
-[Aggregate("SessionReview")]
+public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+{
+    // Uses the [Aggregate] attribute from SessionReviewState
+}
+
 public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewState, SessionReviewCommand>
 {
-    // ...
+    // Uses the [Aggregate] attribute from SessionReviewState
 }
 ```
 
@@ -89,13 +95,14 @@ Properties:
 
 **Automatic Snapshots:**
 
-Configure automatic snapshots by setting the `SnapshotInterval`:
+Configure automatic snapshots by setting the `SnapshotInterval` on the state type:
 
 ```csharp
 [Aggregate("SessionReview", SnapshotInterval = 50)]
-public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
+public sealed record SessionReviewState
 {
-    // Automatically snapshots every 50 events
+    // Automatically snapshots every 50 events when using StateRunner
+    // ...
 }
 ```
 
@@ -150,27 +157,10 @@ public abstract record SessionReviewEvent
 }
 ```
 
-### 3. Define Your State Folder
+### 3. Define Your State
 
 ```csharp
-using Rickten.EventStore;
-using Rickten.Aggregator;
-
 [Aggregate("SessionReview")]
-public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
-{
-    // Inject the type metadata registry
-    public SessionReviewStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
-
-    public override SessionReviewState InitialState() => new();
-
-    protected override SessionReviewState When(SessionStarted e, SessionReviewState state) =>
-        state with { SessionId = e.SessionId, UserId = e.UserId, StartedAt = e.StartedAt };
-
-    protected override SessionReviewState When(InteractionRecorded e, SessionReviewState state) =>
-        state with { Interactions = state.Interactions.Add(e) };
-}
-
 public sealed record SessionReviewState
 {
     public string SessionId { get; init; } = string.Empty;
@@ -180,59 +170,26 @@ public sealed record SessionReviewState
 }
 ```
 
-### 3. Define Your State
+### 4. Define Your State Folder
 
 ```csharp
-public sealed record SessionReviewState
-{
-    public string? SessionId { get; init; }
-    public string? UserId { get; init; }
-    public SessionStatus Status { get; init; }
-    public List<Interaction> Interactions { get; init; } = [];
-}
-```
+using Rickten.EventStore;
+using Rickten.Aggregator;
 
-### 4. Implement State Folder (Using Base Class)
-
-```csharp
-[Aggregate("SessionReview")]
 public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 {
-    public override SessionReviewState InitialState() => new() 
-    { 
-        Status = SessionStatus.NotStarted 
-    };
+    // Inject the type metadata registry
+    public SessionReviewStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
 
-    // Define explicit handler for each event type
-    protected SessionReviewState When(SessionReviewEvent.SessionStarted started, SessionReviewState state)
-    {
-        return state with
-        {
-            SessionId = started.SessionId,
-            UserId = started.UserId,
-            Status = SessionStatus.Active
-        };
-    }
+    public override SessionReviewState InitialState() => new();
 
-    protected SessionReviewState When(SessionReviewEvent.InteractionRecorded interaction, SessionReviewState state)
-    {
-        return state with
-        {
-            Interactions = [.. state.Interactions, new Interaction(
-                interaction.InteractionId,
-                interaction.Type,
-                interaction.Content,
-                interaction.RecordedAt)]
-        };
-    }
+    protected SessionReviewState When(SessionStarted e, SessionReviewState state) =>
+        state with { SessionId = e.SessionId, UserId = e.UserId, StartedAt = e.StartedAt };
+
+    protected SessionReviewState When(InteractionRecorded e, SessionReviewState state) =>
+        state with { Interactions = state.Interactions.Add(e) };
 }
 ```
-
-**Event Handler Convention:**
-- Method name must be `When`
-- Signature: `protected TState When(EventType e, TState state)`
-- One method per event type
-- Validation at construction ensures all events are handled
 
 ### 5. Implement Command Decider (Using Base Class with Helpers)
 
@@ -374,7 +331,7 @@ Console.WriteLine($"Events appended: {events.Count}");
    - Base classes handle common patterns
 
 3. **Validation**
-   - `[Aggregate]` attribute required on implementations
+   - `[Aggregate]` attribute required on state types (not on folder or decider implementations)
    - Commands validated against aggregate (via `[Command]` attribute)
    - Events validated against aggregate (via `[Event]` attribute)
    - Event coverage validated at construction: all events must have `When()` handlers

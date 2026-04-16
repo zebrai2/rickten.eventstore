@@ -66,7 +66,6 @@ dotnet add package Rickten.Projector
 - ✅ **Projections** - Build read models from event streams
 - ✅ **Dependency Injection** - First-class DI support with flexible configuration
 - ✅ **Multiple Storage Options** - SQL Server, PostgreSQL, SQLite, In-Memory
-- ✅ **Separate Store Registration** - Use different databases for events, snapshots, and projections
 - ✅ **Async/Await** - Modern async patterns with `IAsyncEnumerable`
 - ✅ **Strong Typing** - Type-safe event handling with records
 - ✅ **Metadata Support** - Attach metadata to events (correlation IDs, causation IDs, etc.)
@@ -135,22 +134,15 @@ using Rickten.EventStore.EntityFramework;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Option 1: Register all stores together (simple scenario)
+// Register all stores together (events, snapshots, and projections share a DbContext)
 // Pass assemblies containing your events, aggregates, and commands
 builder.Services.AddEventStoreSqlServer(
     builder.Configuration.GetConnectionString("EventStore"),
-    typeof(OrderCreatedEvent).Assembly);  // Register assemblies with event types
+    new[] { typeof(OrderCreatedEvent).Assembly });  // Register assemblies with event types
 
-// Option 2: Register stores separately (advanced scenario)
-builder.Services.AddEventStoreOnly(options => 
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Events")),
-    typeof(OrderCreatedEvent).Assembly);  // Assemblies required here too
-
-builder.Services.AddSnapshotStoreOnly(options => 
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Snapshots")));
-
-builder.Services.AddProjectionStoreOnly(options => 
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Projections")));
+// Alternative: Use generic marker types to identify assemblies
+builder.Services.AddEventStoreSqlServer<OrderCreatedEvent>(
+    builder.Configuration.GetConnectionString("EventStore"));
 
 var app = builder.Build();
 ```
@@ -358,10 +350,10 @@ Use this when all stores share the same database:
 
 ```csharp
 // In-memory (for testing)
-services.AddEventStoreInMemory("MyApp");
+services.AddEventStoreInMemory("MyApp", typeof(MyEvent).Assembly);
 
 // SQL Server
-services.AddEventStoreSqlServer(connectionString);
+services.AddEventStoreSqlServer(connectionString, new[] { typeof(MyEvent).Assembly });
 
 // Custom configuration
 services.AddEventStore(options =>
@@ -374,7 +366,7 @@ services.AddEventStore(options =>
             errorNumbersToAdd: null);
         sqlOptions.CommandTimeout(60);
     });
-});
+}, typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly);
 ```
 
 ## 📝 Working with Events
