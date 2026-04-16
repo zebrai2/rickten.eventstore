@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Testcontainers.MsSql;
+using Rickten.Aggregator;
 
 namespace Rickten.EventStore.Tests.Integration;
 
@@ -15,6 +16,9 @@ public record ProductCreatedEventSqlServer(string Name, decimal Price);
 
 [Event("ProductSqlServer", "Updated", 1)]
 public record ProductUpdatedEventSqlServer(decimal NewPrice);
+
+[Aggregate("ProductSqlServer")]
+public record ProductStateSqlServer(string Name, decimal Price);
 
 /// <summary>
 /// Integration tests using SQL Server via Docker/Testcontainers.
@@ -90,6 +94,7 @@ public class EventStoreIntegrationTestsSqlServer : EventStoreIntegrationTestsBas
     protected override EventStoreDbContext CreateContext() => CreateContextInternal();
     protected override object CreateProductCreatedEvent(string name, decimal price) => new ProductCreatedEventSqlServer(name, price);
     protected override object CreateProductUpdatedEvent(decimal newPrice) => new ProductUpdatedEventSqlServer(newPrice);
+    protected override object CreateProductState(string name, decimal price) => new ProductStateSqlServer(name, price);
     protected override void AssertProductCreatedEvent(object evt, string expectedName, decimal expectedPrice)
     {
         var productEvent = Assert.IsType<ProductCreatedEventSqlServer>(evt);

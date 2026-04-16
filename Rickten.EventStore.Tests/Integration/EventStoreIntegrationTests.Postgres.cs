@@ -5,6 +5,7 @@ using Rickten.EventStore;
 using System;
 using System.Threading.Tasks;
 using Testcontainers.PostgreSql;
+using Rickten.Aggregator;
 
 namespace Rickten.EventStore.Tests.Integration;
 
@@ -13,6 +14,9 @@ public record ProductCreatedEventPostgres(string Name, decimal Price);
 
 [Event("ProductPostgres", "Updated", 1)]
 public record ProductUpdatedEventPostgres(decimal NewPrice);
+
+[Aggregate("ProductPostgres")]
+public record ProductStatePostgres(string Name, decimal Price);
 
 /// <summary>
 /// Integration tests using PostgreSQL via Docker/Testcontainers.
@@ -93,5 +97,10 @@ public class EventStoreIntegrationTestsPostgres : EventStoreIntegrationTestsBase
         var productEvent = Assert.IsType<ProductCreatedEventPostgres>(evt);
         Assert.Equal(expectedName, productEvent.Name);
         Assert.Equal(expectedPrice, productEvent.Price);
+    }
+
+    protected override object CreateProductState(string name, decimal price)
+    {
+        return new ProductStatePostgres(name, price);
     }
 }

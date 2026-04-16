@@ -71,7 +71,7 @@ public class SerializerTests
         dynamic result = Serializer.Deserialize<dynamic>(json);
 
         Assert.NotNull(result.items);
-        var items = (List<object?>)result.items;
+        var items = (List<object>)result.items;
         Assert.Equal(5, items.Count);
         Assert.Equal(1L, Convert.ToInt64(items[0]));
         Assert.Equal(5L, Convert.ToInt64(items[4]));
@@ -91,7 +91,7 @@ public class SerializerTests
 
         dynamic result = Serializer.Deserialize<dynamic>(json);
 
-        var products = (List<object?>)result.products;
+        var products = (List<object>)result.products;
         Assert.Equal(2, products.Count);
 
         dynamic product1 = products[0];
@@ -212,7 +212,7 @@ public class SerializerTests
         Assert.True((bool)result.order.isPaid);
         Assert.Null(result.order.notes);
 
-        var items = (List<object?>)result.order.items;
+        var items = (List<object>)result.order.items;
         Assert.Equal(2, items.Count);
 
         dynamic item1 = items[0];

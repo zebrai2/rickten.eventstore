@@ -46,6 +46,11 @@ public abstract class EventStoreIntegrationTestsBase
     protected abstract object CreateProductUpdatedEvent(decimal newPrice);
 
     /// <summary>
+    /// Creates a product aggregate state for snapshot testing.
+    /// </summary>
+    protected abstract object CreateProductState(string name, decimal price);
+
+    /// <summary>
     /// Validates that a loaded event is a product created event with expected values.
     /// </summary>
     protected abstract void AssertProductCreatedEvent(object evt, string expectedName, decimal expectedPrice);
@@ -254,12 +259,12 @@ public abstract class EventStoreIntegrationTestsBase
         // Save initial snapshot
         await snapshotStore.SaveSnapshotAsync(
             new StreamPointer(streamId, 5),
-            CreateProductCreatedEvent("Snapshot1", 100m));
+            CreateProductState("Snapshot1", 100m));
 
         // Update snapshot (should replace due to PK constraint)
         await snapshotStore.SaveSnapshotAsync(
             new StreamPointer(streamId, 10),
-            CreateProductCreatedEvent("Snapshot2", 200m));
+            CreateProductState("Snapshot2", 200m));
 
         // Verify only one snapshot exists in database
         using var context = CreateContext();

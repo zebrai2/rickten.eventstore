@@ -8,10 +8,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using Rickten.Aggregator;
 
 namespace Rickten.EventStore.Tests.Integration;
 
-[Event("Order", "StateSnapshot", 1)]
+[Aggregate("Order")]
 public record OrderStateSnapshot(string Status, decimal TotalAmount, int ItemCount);
 
 [Event("Order", "ItemAdded", 1)]

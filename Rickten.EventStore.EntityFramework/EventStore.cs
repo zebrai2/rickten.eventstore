@@ -93,11 +93,9 @@ public sealed class EventStore : IEventStore
         if (currentVersion != expectedVersion.Version)
         {
             throw new StreamVersionConflictException(
-                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}. Expected {expectedVersion.Version}, actual {currentVersion}")
-            {
-                ExpectedVersion = expectedVersion,
-                ActualVersion = new StreamPointer(expectedVersion.Stream, currentVersion)
-            };
+                expectedVersion,
+                new StreamPointer(expectedVersion.Stream, currentVersion),
+                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}. Expected {expectedVersion.Version}, actual {currentVersion}");
         }
 
         var appendedEvents = new List<StreamEvent>();
@@ -154,12 +152,17 @@ public sealed class EventStore : IEventStore
         }
         catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
         {
+            // Re-query to get the actual current version
+            var actualVersion = await _context.Events
+                .Where(e => e.StreamType == expectedVersion.Stream.StreamType
+                         && e.StreamIdentifier == expectedVersion.Stream.Identifier)
+                .MaxAsync(e => (long?)e.Version, cancellationToken) ?? 0;
+
             throw new StreamVersionConflictException(
+                expectedVersion,
+                new StreamPointer(expectedVersion.Stream, actualVersion),
                 $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}",
-                ex)
-            {
-                ExpectedVersion = expectedVersion
-            };
+                ex);
         }
 
         // Load back with global positions (only the newly appended events)

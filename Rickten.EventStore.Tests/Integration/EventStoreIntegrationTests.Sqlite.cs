@@ -4,6 +4,7 @@ using Rickten.EventStore.EntityFramework;
 using Rickten.EventStore;
 using System;
 using Microsoft.Data.Sqlite;
+using Rickten.Aggregator;
 
 namespace Rickten.EventStore.Tests.Integration;
 
@@ -12,6 +13,9 @@ public record ProductCreatedEventSqlite(string Name, decimal Price);
 
 [Event("ProductSqlite", "Updated", 1)]
 public record ProductUpdatedEventSqlite(decimal NewPrice);
+
+[Aggregate("ProductSqlite")]
+public record ProductStateSqlite(string Name, decimal Price);
 
 /// <summary>
 /// Integration tests using SQLite in-memory database.
@@ -62,6 +66,9 @@ public class EventStoreIntegrationTestsSqlite : EventStoreIntegrationTestsBase, 
 
     protected override object CreateProductUpdatedEvent(decimal newPrice) 
         => new ProductUpdatedEventSqlite(newPrice);
+
+    protected override object CreateProductState(string name, decimal price) 
+        => new ProductStateSqlite(name, price);
 
     protected override void AssertProductCreatedEvent(object evt, string expectedName, decimal expectedPrice)
     {
