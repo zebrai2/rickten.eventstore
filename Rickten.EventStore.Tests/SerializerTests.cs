@@ -1,5 +1,6 @@
 using Xunit;
 using Rickten.EventStore.EntityFramework.Serialization;
+using Rickten.EventStore.TypeMetadata;
 using System;
 using System.Collections.Generic;
 using System.Dynamic;
@@ -8,8 +9,8 @@ using System.Linq;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Unit tests for the Serializer class, focusing on the dynamic object
-/// deserialization logic that converts JsonElement to ExpandoObject.
+/// Unit tests for the EventStoreSerializer class, focusing on dynamic object
+/// deserialization and typed serialization.
 /// </summary>
 public class SerializerTests
 {
@@ -18,9 +19,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_SimpleObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"Widget","price":99.99}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.NotNull(result);
         Assert.Equal("Widget", (string)result.name);
@@ -30,10 +33,12 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_WithCamelCaseProperties_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         // Serializer uses camelCase by default
         var json = """{"totalAmount":500,"itemCount":5}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(500, (long)result.totalAmount);
         Assert.Equal(5, (long)result.itemCount);
@@ -42,6 +47,8 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_NestedObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """
         {
             "order": {
@@ -55,7 +62,7 @@ public class SerializerTests
         }
         """;
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("123", (string)result.order.id);
         Assert.Equal(100.50, (double)result.order.total);
@@ -66,9 +73,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_Array_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"items":[1,2,3,4,5]}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.NotNull(result.items);
         var items = (List<object>)result.items;
@@ -80,6 +89,8 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_ArrayOfObjects_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """
         {
             "products": [
@@ -89,7 +100,7 @@ public class SerializerTests
         }
         """;
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         var products = (List<object>)result.products;
         Assert.Equal(2, products.Count);
@@ -106,9 +117,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_NullValue_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"Test","description":null}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("Test", (string)result.name);
         Assert.Null(result.description);
@@ -117,9 +130,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_BooleanValues_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"isActive":true,"isDeleted":false}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.True((bool)result.isActive);
         Assert.False((bool)result.isDeleted);
@@ -128,9 +143,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_IntegerNumber_ReturnsLong()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"count":42}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(42L, (long)result.count);
     }
@@ -138,9 +155,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_FloatingPointNumber_ReturnsDouble()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"price":99.99}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(99.99, (double)result.price);
     }
@@ -148,10 +167,12 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_LargeNumber_ReturnsDouble()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         // Number too large for long
         var json = """{"bigNumber":9999999999999999999}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(9999999999999999999.0, (double)result.bigNumber);
     }
@@ -159,9 +180,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_EmptyObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.NotNull(result);
         var dict = (IDictionary<string, object?>)result;
@@ -171,9 +194,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_EmptyArray_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"items":[]}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         var items = (List<object?>)result.items;
         Assert.Empty(items);
@@ -182,6 +207,8 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_ComplexNestedStructure_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """
         {
             "order": {
@@ -205,7 +232,7 @@ public class SerializerTests
         }
         """;
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("ORD-123", (string)result.order.id);
         Assert.Equal(46.00, (double)result.order.total);
@@ -228,9 +255,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_TypedObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"Test Product","price":99.99}""";
 
-        var result = Serializer.Deserialize<TestProduct>(json);
+        var result = serializer.Deserialize<TestProduct>(json);
 
         Assert.Equal("Test Product", result.Name);
         Assert.Equal(99.99m, result.Price);
@@ -239,9 +268,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_TypedObject_WithCamelCase_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"Widget","price":50.00}""";
 
-        var result = Serializer.Deserialize<TestProduct>(json);
+        var result = serializer.Deserialize<TestProduct>(json);
 
         Assert.Equal("Widget", result.Name);
         Assert.Equal(50.00m, result.Price);
@@ -250,10 +281,12 @@ public class SerializerTests
     [Fact]
     public void Deserialize_TypedObject_Null_ThrowsException()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = "null";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            Serializer.Deserialize<TestProduct>(json));
+            serializer.Deserialize<TestProduct>(json));
 
         Assert.Contains("Failed to deserialize", ex.Message);
     }
@@ -265,9 +298,11 @@ public class SerializerTests
     [Fact]
     public void Serialize_SimpleObject_UsesCamelCase()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var obj = new { Name = "Widget", Price = 99.99 };
 
-        var json = Serializer.Serialize(obj);
+        var json = serializer.Serialize(obj);
 
         Assert.Contains("\"name\"", json);
         Assert.Contains("\"price\"", json);
@@ -278,9 +313,11 @@ public class SerializerTests
     [Fact]
     public void Serialize_NullProperty_IsOmitted()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var obj = new { Name = "Test", Description = (string?)null };
 
-        var json = Serializer.Serialize(obj);
+        var json = serializer.Serialize(obj);
 
         Assert.Contains("\"name\"", json);
         Assert.DoesNotContain("description", json);
@@ -289,6 +326,8 @@ public class SerializerTests
     [Fact]
     public void Serialize_ComplexObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var obj = new
         {
             Order = new
@@ -299,7 +338,7 @@ public class SerializerTests
             }
         };
 
-        var json = Serializer.Serialize(obj);
+        var json = serializer.Serialize(obj);
 
         Assert.Contains("\"order\"", json);
         Assert.Contains("\"id\"", json);
@@ -314,10 +353,12 @@ public class SerializerTests
     [Fact]
     public void RoundTrip_SimpleObject_AsTyped_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var original = new TestProduct { Name = "Widget", Price = 99.99m };
 
-        var json = Serializer.Serialize(original);
-        var result = Serializer.Deserialize<TestProduct>(json);
+        var json = serializer.Serialize(original);
+        var result = serializer.Deserialize<TestProduct>(json);
 
         Assert.Equal(original.Name, result.Name);
         Assert.Equal(original.Price, result.Price);
@@ -326,10 +367,12 @@ public class SerializerTests
     [Fact]
     public void RoundTrip_AnonymousObject_AsDynamic_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var original = new { Count = 5, Total = 100.50, IsActive = true };
 
-        var json = Serializer.Serialize(original);
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        var json = serializer.Serialize(original);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(5L, (long)result.count);
         Assert.Equal(100.50, (double)result.total);
@@ -339,6 +382,8 @@ public class SerializerTests
     [Fact]
     public void RoundTrip_ComplexObject_AsDynamic_PreservesStructure()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var original = new
         {
             Order = new
@@ -352,8 +397,8 @@ public class SerializerTests
             }
         };
 
-        var json = Serializer.Serialize(original);
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        var json = serializer.Serialize(original);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("ORD-123", (string)result.order.id);
         var items = (List<object?>)result.order.items;
@@ -367,9 +412,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_StringWithSpecialCharacters_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"text":"Hello \"World\"\nNew Line\tTab"}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Contains("\"World\"", (string)result.text);
         Assert.Contains("\n", (string)result.text);
@@ -379,9 +426,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_UnicodeCharacters_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"greeting":"Hello 世界 🌍"}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("Hello 世界 🌍", (string)result.greeting);
     }
@@ -389,6 +438,8 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_NumberFormats_Work()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """
         {
             "integer":42,
@@ -399,7 +450,7 @@ public class SerializerTests
         }
         """;
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal(42L, (long)result.integer);
         Assert.Equal(-100L, (long)result.negative);
@@ -411,6 +462,8 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_DeeplyNestedObject_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """
         {
             "level1": {
@@ -425,7 +478,7 @@ public class SerializerTests
         }
         """;
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         Assert.Equal("deep", (string)result.level1.level2.level3.level4.value);
     }
@@ -433,9 +486,11 @@ public class SerializerTests
     [Fact]
     public void Deserialize_Dynamic_MixedTypeArray_Works()
     {
+        var registry = TestTypeMetadataRegistry.Create();
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"mixed":[1,"two",3.0,true,null]}""";
 
-        dynamic result = Serializer.Deserialize<dynamic>(json);
+        dynamic result = serializer.Deserialize<dynamic>(json);
 
         var mixed = (List<object?>)result.mixed;
         Assert.Equal(5, mixed.Count);

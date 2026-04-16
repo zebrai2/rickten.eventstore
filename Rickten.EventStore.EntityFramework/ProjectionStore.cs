@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework.Entities;
 using Rickten.EventStore.EntityFramework.Serialization;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore.EntityFramework;
 
@@ -10,14 +11,17 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class ProjectionStore : IProjectionStore
 {
     private readonly EventStoreDbContext _context;
+    private readonly EventStoreSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectionStore"/> class.
     /// </summary>
     /// <param name="context">The database context.</param>
-    public ProjectionStore(EventStoreDbContext context)
+    /// <param name="registry">The type metadata registry.</param>
+    public ProjectionStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _serializer = new EventStoreSerializer(registry);
     }
 
     /// <inheritdoc />
@@ -35,7 +39,7 @@ public sealed class ProjectionStore : IProjectionStore
             return null;
         }
 
-        var state = Serializer.Deserialize<TState>(entity.State);
+        var state = _serializer.Deserialize<TState>(entity.State);
 
         return new Projection<TState>(state, entity.GlobalPosition);
     }
@@ -54,7 +58,7 @@ public sealed class ProjectionStore : IProjectionStore
                 p => p.ProjectionKey == projectionKey,
                 cancellationToken);
 
-        var serializedState = Serializer.Serialize(state);
+        var serializedState = _serializer.Serialize(state);
 
         if (entity == null)
         {

@@ -1,4 +1,5 @@
 using System;
+using Rickten.EventStore.TypeMetadata;
 
 namespace Rickten.EventStore;
 
@@ -9,7 +10,7 @@ namespace Rickten.EventStore;
 /// <param name="name">The name of the event.</param>
 /// <param name="version">The version of the event schema.</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public sealed class EventAttribute(string aggregate, string name, int version) : Attribute
+public sealed class EventAttribute(string aggregate, string name, int version) : Attribute, ITypeMetadata
 {
     /// <summary>
     /// Gets the aggregate type this event belongs to.
@@ -23,4 +24,16 @@ public sealed class EventAttribute(string aggregate, string name, int version) :
     /// Gets the version of the event schema.
     /// </summary>
     public int Version { get; init; } = version;
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetWireName(Type decoratedType)
+    {
+        return $"{Aggregate}.{Name}.v{Version}";
+    }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetAggregateName()
+    {
+        return Aggregate;
+    }
 }

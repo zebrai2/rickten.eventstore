@@ -7,7 +7,7 @@ using System;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Tests for StateSerializer ensuring explicit registry-driven type resolution.
+/// Tests for EventStoreSerializer ensuring explicit registry-driven type resolution for aggregate state.
 /// </summary>
 public class StateSerializerTests
 {
@@ -23,7 +23,7 @@ public class StateSerializerTests
     public void Serialize_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var state = new TestState("test", 42);
 
         var json = serializer.Serialize(state);
@@ -34,26 +34,26 @@ public class StateSerializerTests
     }
 
     [Fact]
-    public void GetTypeName_RegisteredState_ReturnsWireName()
+    public void GetWireName_RegisteredState_ReturnsWireName()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var state = new TestState("test", 42);
 
-        var typeName = serializer.GetTypeName(state);
+        var wireName = serializer.GetWireName(state);
 
-        Assert.Equal("TestAggregate.TestState", typeName);
+        Assert.Equal("TestAggregate.TestState", wireName);
     }
 
     [Fact]
-    public void GetTypeName_UnregisteredState_ThrowsException()
+    public void GetWireName_UnregisteredState_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var state = new UnregisteredState("unregistered");
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            serializer.GetTypeName(state));
+            serializer.GetWireName(state));
 
         Assert.Contains("not registered", ex.Message);
         Assert.Contains("UnregisteredState", ex.Message);
@@ -64,7 +64,7 @@ public class StateSerializerTests
     public void Deserialize_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"test","value":42}""";
 
         var result = serializer.Deserialize(json, "TestAggregate.TestState");
@@ -76,18 +76,17 @@ public class StateSerializerTests
     }
 
     [Fact]
-    public void Deserialize_UnregisteredTypeName_ThrowsException()
+    public void Deserialize_UnregisteredWireName_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"data":"test"}""";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             serializer.Deserialize(json, "UnknownAggregate.UnknownState"));
 
-        Assert.Contains("Cannot resolve state type", ex.Message);
+        Assert.Contains("Cannot resolve type", ex.Message);
         Assert.Contains("UnknownAggregate.UnknownState", ex.Message);
-        Assert.Contains("not registered", ex.Message);
         Assert.Contains("ITypeMetadataRegistry", ex.Message);
     }
 
@@ -95,7 +94,7 @@ public class StateSerializerTests
     public void Deserialize_FullNameInsteadOfWireName_ThrowsException()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var json = """{"name":"test","value":42}""";
 
         // Even though TestState is registered, using FullName instead of WireName should fail
@@ -104,21 +103,20 @@ public class StateSerializerTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             serializer.Deserialize(json, fullName));
 
-        Assert.Contains("Cannot resolve state type", ex.Message);
+        Assert.Contains("Cannot resolve type", ex.Message);
         Assert.Contains(fullName, ex.Message);
-        Assert.Contains("not registered", ex.Message);
     }
 
     [Fact]
     public void RoundTrip_RegisteredState_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
         var original = new TestState("roundtrip", 99);
 
-        var typeName = serializer.GetTypeName(original);
+        var wireName = serializer.GetWireName(original);
         var json = serializer.Serialize(original);
-        var result = serializer.Deserialize(json, typeName);
+        var result = serializer.Deserialize(json, wireName);
 
         Assert.NotNull(result);
         var deserialized = Assert.IsType<TestState>(result);
@@ -130,23 +128,23 @@ public class StateSerializerTests
     public void RoundTrip_MultipleRegisteredStates_Works()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
 
         var state1 = new TestState("first", 1);
         var state2 = new AnotherState(123.45m);
 
-        var typeName1 = serializer.GetTypeName(state1);
+        var wireName1 = serializer.GetWireName(state1);
         var json1 = serializer.Serialize(state1);
-        var result1 = serializer.Deserialize(json1, typeName1);
+        var result1 = serializer.Deserialize(json1, wireName1);
 
-        var typeName2 = serializer.GetTypeName(state2);
+        var wireName2 = serializer.GetWireName(state2);
         var json2 = serializer.Serialize(state2);
-        var result2 = serializer.Deserialize(json2, typeName2);
+        var result2 = serializer.Deserialize(json2, wireName2);
 
-        Assert.Equal("TestAggregate.TestState", typeName1);
+        Assert.Equal("TestAggregate.TestState", wireName1);
         Assert.IsType<TestState>(result1);
 
-        Assert.Equal("AnotherAggregate.AnotherState", typeName2);
+        Assert.Equal("AnotherAggregate.AnotherState", wireName2);
         Assert.IsType<AnotherState>(result2);
     }
 
@@ -154,7 +152,7 @@ public class StateSerializerTests
     public void Constructor_NullRegistry_ThrowsArgumentNullException()
     {
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            new StateSerializer(null!));
+            new EventStoreSerializer(null!));
 
         Assert.Equal("registry", ex.ParamName);
     }
@@ -163,7 +161,7 @@ public class StateSerializerTests
     public void Deserialize_NullJson_Throws()
     {
         var registry = TestTypeMetadataRegistry.Create();
-        var serializer = new StateSerializer(registry);
+        var serializer = new EventStoreSerializer(registry);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             serializer.Deserialize("null", "TestAggregate.TestState"));

@@ -12,7 +12,7 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class EventStore : IEventStore
 {
     private readonly EventStoreDbContext _context;
-    private readonly Serializer<EventAttribute> _eventSerializer;
+    private readonly EventStoreSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EventStore"/> class.
@@ -22,7 +22,7 @@ public sealed class EventStore : IEventStore
     public EventStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _eventSerializer = new Serializer<EventAttribute>(registry);
+        _serializer = new EventStoreSerializer(registry);
     }
 
     /// <inheritdoc />
@@ -136,9 +136,9 @@ public sealed class EventStore : IEventStore
                 StreamType = expectedVersion.Stream.StreamType,
                 StreamIdentifier = expectedVersion.Stream.Identifier,
                 Version = version,
-                EventType = _eventSerializer.GetTypeName(appendEvent.Event),
-                EventData = _eventSerializer.Serialize(appendEvent.Event),
-                Metadata = Serializer.Serialize(metadata.ToArray()),
+                EventType = _serializer.GetWireName(appendEvent.Event),
+                EventData = _serializer.Serialize(appendEvent.Event),
+                Metadata = _serializer.Serialize(metadata.ToArray()),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -182,8 +182,8 @@ public sealed class EventStore : IEventStore
             new StreamIdentifier(entity.StreamType, entity.StreamIdentifier),
             entity.Version);
 
-        var eventData = _eventSerializer.Deserialize(entity.EventData, entity.EventType);
-        var metadata = Serializer.Deserialize<EventMetadata[]>(entity.Metadata);
+        var eventData = _serializer.Deserialize(entity.EventData, entity.EventType);
+        var metadata = _serializer.Deserialize<EventMetadata[]>(entity.Metadata);
 
         return new StreamEvent(
             streamPointer,

@@ -1,3 +1,5 @@
+using Rickten.EventStore.TypeMetadata;
+
 namespace Rickten.Aggregator;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace Rickten.Aggregator;
 /// </summary>
 /// <param name="name">The aggregate name (must match Event attribute aggregate names).</param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
-public sealed class AggregateAttribute(string name) : Attribute
+public sealed class AggregateAttribute(string name) : Attribute, ITypeMetadata
 {
     /// <summary>
     /// Gets the aggregate name.
@@ -27,4 +29,16 @@ public sealed class AggregateAttribute(string name) : Attribute
     /// Default is 0 (no automatic snapshots).
     /// </summary>
     public int SnapshotInterval { get; init; } = 0;
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetWireName(Type decoratedType)
+    {
+        return $"{Name}.{decoratedType.Name}";
+    }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetAggregateName()
+    {
+        return Name;
+    }
 }

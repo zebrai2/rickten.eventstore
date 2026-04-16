@@ -12,8 +12,9 @@ public sealed record TypeMetadata
 
     /// <summary>
     /// Gets the wire/storage name used for serialization.
+    /// Null if the type doesn't participate in wire name serialization.
     /// </summary>
-    public required string WireName { get; init; }
+    public required string? WireName { get; init; }
 
     /// <summary>
     /// Gets the aggregate/category name, if applicable.

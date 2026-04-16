@@ -1,3 +1,5 @@
+using Rickten.EventStore.TypeMetadata;
+
 namespace Rickten.Projector;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace Rickten.Projector;
 /// </summary>
 /// <param name="name">The projection name (used for checkpointing and identification).</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public sealed class ProjectionAttribute(string name) : Attribute
+public sealed class ProjectionAttribute(string name) : Attribute, ITypeMetadata
 {
     /// <summary>
     /// Gets the projection name.
@@ -31,4 +33,19 @@ public sealed class ProjectionAttribute(string name) : Attribute
     /// Gets or sets a description of what this projection does.
     /// </summary>
     public string? Description { get; init; }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetWireName(Type decoratedType)
+    {
+        // Projections use typed serialization, but provide a wire name for registry consistency
+        // Include type name to ensure uniqueness when multiple projections share a logical name
+        return $"Projection.{Name}.{decoratedType.Name}";
+    }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetAggregateName()
+    {
+        // Projections don't belong to a single aggregate
+        return null;
+    }
 }

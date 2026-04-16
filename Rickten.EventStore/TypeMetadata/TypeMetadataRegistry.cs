@@ -85,124 +85,72 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
 
         foreach (var type in types)
         {
-            ProcessEventAttribute(type, allMetadataList, typeToMetadata, wireNameToType, aggregateToEventTypes);
-            ProcessAggregateAttribute(type, allMetadataList, typeToMetadata, wireNameToType);
-            ProcessCommandAttribute(type, allMetadataList, typeToMetadata, wireNameToType);
+            // Look for any attribute implementing ITypeMetadata
+            var metadataAttr = type.GetCustomAttributes(inherit: false)
+                .OfType<ITypeMetadata>()
+                .FirstOrDefault();
+
+            if (metadataAttr == null) continue;
+
+            ProcessTypeMetadata(type, metadataAttr, allMetadataList, typeToMetadata, wireNameToType, aggregateToEventTypes);
         }
     }
 
-    private static void ProcessEventAttribute(
+    private static void ProcessTypeMetadata(
         Type type,
+        ITypeMetadata metadataAttr,
         List<TypeMetadata> allMetadataList,
         Dictionary<Type, TypeMetadata> typeToMetadata,
         Dictionary<string, Type> wireNameToType,
         Dictionary<string, HashSet<Type>> aggregateToEventTypes)
     {
-        var eventAttr = type.GetCustomAttribute<EventAttribute>();
-        if (eventAttr == null) return;
+        var wireName = metadataAttr.GetWireName(type);
+        if (wireName == null)
+        {
+            // Type doesn't participate in wire name serialization (e.g., some projections)
+            // Still register it for metadata lookup
+            var metadataWithoutWireName = new TypeMetadata
+            {
+                ClrType = type,
+                WireName = null,
+                AggregateName = metadataAttr.GetAggregateName(),
+                AttributeType = metadataAttr.GetType(),
+                AttributeInstance = (Attribute)metadataAttr
+            };
 
-        var wireName = $"{eventAttr.Aggregate}.{eventAttr.Name}.v{eventAttr.Version}";
+            allMetadataList.Add(metadataWithoutWireName);
+            typeToMetadata[type] = metadataWithoutWireName;
+            return;
+        }
 
         if (wireNameToType.TryGetValue(wireName, out var existingType))
         {
             throw new InvalidOperationException(
                 $"Duplicate wire name '{wireName}' found for types '{existingType.FullName}' and '{type.FullName}'. " +
-                $"Each [Event] must have a unique (Aggregate, Name, Version) combination.");
+                $"Each type must have a unique wire name.");
         }
 
         var metadata = new TypeMetadata
         {
             ClrType = type,
             WireName = wireName,
-            AggregateName = eventAttr.Aggregate,
-            AttributeType = typeof(EventAttribute),
-            AttributeInstance = eventAttr
+            AggregateName = metadataAttr.GetAggregateName(),
+            AttributeType = metadataAttr.GetType(),
+            AttributeInstance = (Attribute)metadataAttr
         };
 
         allMetadataList.Add(metadata);
         typeToMetadata[type] = metadata;
         wireNameToType[wireName] = type;
 
-        if (!aggregateToEventTypes.ContainsKey(eventAttr.Aggregate))
+        // Track event types by aggregate
+        if (metadataAttr is EventAttribute && metadata.AggregateName != null)
         {
-            aggregateToEventTypes[eventAttr.Aggregate] = new HashSet<Type>();
+            if (!aggregateToEventTypes.ContainsKey(metadata.AggregateName))
+            {
+                aggregateToEventTypes[metadata.AggregateName] = new HashSet<Type>();
+            }
+            aggregateToEventTypes[metadata.AggregateName].Add(type);
         }
-        aggregateToEventTypes[eventAttr.Aggregate].Add(type);
-    }
-
-    private static void ProcessAggregateAttribute(
-        Type type,
-        List<TypeMetadata> allMetadataList,
-        Dictionary<Type, TypeMetadata> typeToMetadata,
-        Dictionary<string, Type> wireNameToType)
-    {
-        // Check for AggregateAttribute from Rickten.Aggregator
-        var aggregateAttr = type.GetCustomAttributes(inherit: false)
-            .FirstOrDefault(attr => attr.GetType().Name == "AggregateAttribute");
-
-        if (aggregateAttr == null) return;
-
-        var aggregateName = aggregateAttr.GetType().GetProperty("Name")?.GetValue(aggregateAttr) as string;
-        if (aggregateName == null) return;
-
-        var wireName = $"{aggregateName}.{type.Name}";
-
-        if (wireNameToType.TryGetValue(wireName, out var existingType))
-        {
-            throw new InvalidOperationException(
-                $"Duplicate wire name '{wireName}' found for types '{existingType.FullName}' and '{type.FullName}'. " +
-                $"Each [Aggregate] state type must have a unique (Name, TypeName) combination.");
-        }
-
-        var metadata = new TypeMetadata
-        {
-            ClrType = type,
-            WireName = wireName,
-            AggregateName = aggregateName,
-            AttributeType = aggregateAttr.GetType(),
-            AttributeInstance = (Attribute)aggregateAttr
-        };
-
-        allMetadataList.Add(metadata);
-        typeToMetadata[type] = metadata;
-        wireNameToType[wireName] = type;
-    }
-
-    private static void ProcessCommandAttribute(
-        Type type,
-        List<TypeMetadata> allMetadataList,
-        Dictionary<Type, TypeMetadata> typeToMetadata,
-        Dictionary<string, Type> wireNameToType)
-    {
-        // Check for CommandAttribute from Rickten.Aggregator
-        var commandAttr = type.GetCustomAttributes(inherit: false)
-            .FirstOrDefault(attr => attr.GetType().Name == "CommandAttribute");
-
-        if (commandAttr == null) return;
-
-        var aggregateName = commandAttr.GetType().GetProperty("Aggregate")?.GetValue(commandAttr) as string;
-        if (aggregateName == null) return;
-
-        var wireName = $"{aggregateName}.{type.Name}";
-
-        if (wireNameToType.TryGetValue(wireName, out var existingType))
-        {
-            throw new InvalidOperationException(
-                $"Duplicate wire name '{wireName}' found for types '{existingType.FullName}' and '{type.FullName}'. " +
-                $"Each [Command] type must have a unique (Aggregate, TypeName) combination.");
-        }
-
-        var metadata = new TypeMetadata
-        {
-            ClrType = type,
-            WireName = wireName,
-            AggregateName = aggregateName,
-            AttributeType = commandAttr.GetType(),
-            AttributeInstance = (Attribute)commandAttr
-        };
-
-        allMetadataList.Add(metadata);
-        typeToMetadata[type] = metadata;
-        wireNameToType[wireName] = type;
     }
 }

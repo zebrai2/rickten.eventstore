@@ -1,6 +1,8 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.TypeMetadata;
+using Rickten.EventStore.Tests;
 using System;
 using System.Threading.Tasks;
 
@@ -14,7 +16,11 @@ public class ProjectionStoreTests
         return new EventStoreDbContext(options);
     }
 
-    private ProjectionStore CreateStore(string dbName) => new ProjectionStore(CreateContext(dbName));
+    private ProjectionStore CreateStore(string dbName)
+    {
+        var registry = TestTypeMetadataRegistry.Create();
+        return new ProjectionStore(CreateContext(dbName), registry);
+    }
 
     [Fact]
     public async Task SaveAndLoadProjection_Works()

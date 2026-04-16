@@ -1,3 +1,5 @@
+using Rickten.EventStore.TypeMetadata;
+
 namespace Rickten.Aggregator;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace Rickten.Aggregator;
 /// </summary>
 /// <param name="aggregate">The name of the aggregate this command belongs to.</param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
-public sealed class CommandAttribute(string aggregate) : Attribute
+public sealed class CommandAttribute(string aggregate) : Attribute, ITypeMetadata
 {
     /// <summary>
     /// Gets the name of the aggregate this command belongs to.
@@ -23,4 +25,16 @@ public sealed class CommandAttribute(string aggregate) : Attribute
     /// Gets or sets a description of what this command does.
     /// </summary>
     public string? Description { get; init; }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetWireName(Type decoratedType)
+    {
+        return $"{Aggregate}.{decoratedType.Name}";
+    }
+
+    /// <inheritdoc />
+    string? ITypeMetadata.GetAggregateName()
+    {
+        return Aggregate;
+    }
 }

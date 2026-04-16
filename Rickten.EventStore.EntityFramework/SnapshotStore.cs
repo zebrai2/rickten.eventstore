@@ -12,7 +12,7 @@ namespace Rickten.EventStore.EntityFramework;
 public sealed class SnapshotStore : ISnapshotStore
 {
     private readonly EventStoreDbContext _context;
-    private readonly StateSerializer _stateSerializer;
+    private readonly EventStoreSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SnapshotStore"/> class.
@@ -22,7 +22,7 @@ public sealed class SnapshotStore : ISnapshotStore
     public SnapshotStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _stateSerializer = new StateSerializer(registry);
+        _serializer = new EventStoreSerializer(registry);
     }
 
     /// <inheritdoc />
@@ -42,7 +42,7 @@ public sealed class SnapshotStore : ISnapshotStore
         }
 
         var streamPointer = new StreamPointer(streamIdentifier, entity.Version);
-        var state = _stateSerializer.Deserialize(entity.State, entity.StateType);
+        var state = _serializer.Deserialize(entity.State, entity.StateType);
 
         return new Snapshot(streamPointer, state);
     }
@@ -59,8 +59,8 @@ public sealed class SnapshotStore : ISnapshotStore
                   && s.StreamIdentifier == streamPointer.Stream.Identifier,
                 cancellationToken);
 
-        var serializedState = _stateSerializer.Serialize(state);
-        var stateType = _stateSerializer.GetTypeName(state);
+        var serializedState = _serializer.Serialize(state);
+        var stateType = _serializer.GetWireName(state);
 
         if (entity == null)
         {
