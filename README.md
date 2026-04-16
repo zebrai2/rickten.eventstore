@@ -465,6 +465,8 @@ public async Task ProcessAllEventsExample(IEventStore eventStore)
 }
 ```
 
+**Note:** `LoadAllAsync` loads events exclusively - if `fromGlobalPosition` is N, events with global position > N are returned. This matches `LoadAsync` behavior.
+
 ### Filtering Events
 
 ```csharp

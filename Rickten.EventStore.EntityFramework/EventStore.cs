@@ -51,7 +51,7 @@ public sealed class EventStore : IEventStore
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var query = _context.Events
-            .Where(e => e.Id >= fromGlobalPosition);
+            .Where(e => e.Id > fromGlobalPosition);
 
         if (streamTypeFilter?.Length > 0)
         {

@@ -18,9 +18,11 @@ public interface IEventStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Loads all events across all streams from a global position.
+    /// Loads all events across all streams starting after a global position.
+    /// Events are loaded exclusively - if fromGlobalPosition is N, events with global position &gt; N are returned.
+    /// To load all events from the beginning, pass 0 (default).
     /// </summary>
-    /// <param name="fromGlobalPosition">The global position to start loading from. Defaults to 0 (beginning).</param>
+    /// <param name="fromGlobalPosition">The global position to start loading after (exclusive). Defaults to 0 (beginning).</param>
     /// <param name="streamTypeFilter">Optional filter to include only specific stream types.</param>
     /// <param name="eventsFilter">Optional filter to include only specific event types.</param>
     /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>

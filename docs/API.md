@@ -81,10 +81,12 @@ await foreach (var streamEvent in eventStore.LoadAsync(pointer))
 
 #### LoadAllAsync
 
-Loads all events across all streams from a global position.
+Loads all events across all streams starting **after** a global position.
+
+**Behavior:** Events are loaded exclusively - if `fromGlobalPosition` is N, only events with global position > N are returned. This matches the behavior of `LoadAsync`.
 
 **Parameters:**
-- `fromGlobalPosition` (long): The global position to start loading from. Defaults to 0 (beginning)
+- `fromGlobalPosition` (long): The global position to start loading after (exclusive). Defaults to 0 (beginning)
 - `streamTypeFilter` (string[]?): Optional filter to include only specific stream types
 - `eventsFilter` (string[]?): Optional filter to include only specific event types
 - `cancellationToken` (CancellationToken): Optional cancellation token
@@ -93,14 +95,24 @@ Loads all events across all streams from a global position.
 
 **Example:**
 ```csharp
-// Load all Order events
+// Load all Order events from the beginning (position > 0)
 await foreach (var streamEvent in eventStore.LoadAllAsync(
     fromGlobalPosition: 0,
     streamTypeFilter: new[] { "Order" }))
 {
     // Process event
 }
+
+// Resume from a checkpoint at position N (loads events with position > N)
+await foreach (var streamEvent in eventStore.LoadAllAsync(
+    fromGlobalPosition: lastCheckpointPosition,
+    streamTypeFilter: new[] { "Order" }))
+{
+    // Process new events
+}
 ```
+
+**Note:** To load from the beginning, use `fromGlobalPosition: 0`. To resume from a checkpoint at position N, use `fromGlobalPosition: N` to load events starting from position N+1.
 
 #### AppendAsync
 

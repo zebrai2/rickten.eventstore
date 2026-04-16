@@ -38,7 +38,7 @@ public static class ProjectionRunner
 
         // Load events with optional filtering
         await foreach (var streamEvent in eventStore.LoadAllAsync(
-            fromGlobalPosition + 1,
+            fromGlobalPosition,
             aggregateFilter,
             eventTypeFilter,
             cancellationToken))
@@ -99,7 +99,7 @@ public static class ProjectionRunner
         // Process new events
         var lastGlobalPosition = fromGlobalPosition;
         await foreach (var streamEvent in eventStore.LoadAllAsync(
-            fromGlobalPosition + 1,
+            fromGlobalPosition,
             aggregateFilter,
             eventTypeFilter,
             cancellationToken))
