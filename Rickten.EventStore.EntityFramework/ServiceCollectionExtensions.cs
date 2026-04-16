@@ -20,8 +20,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
     /// <param name="optionsAction">An action to configure the <see cref="DbContextOptionsBuilder"/> for the Event Store.</param>
-    /// <param name="assemblies">The assemblies to scan for attributed types. If not specified, only the calling assembly is scanned.</param>
+    /// <param name="assemblies">The assemblies to scan for attributed types. Must contain at least one assembly.</param>
     /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    /// <exception cref="ArgumentException">Thrown when no assemblies are provided.</exception>
     /// <example>
     /// <code>
     /// services.AddEventStore(options =>
@@ -38,22 +39,19 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(optionsAction);
 
+        if (assemblies == null || assemblies.Length == 0)
+        {
+            throw new ArgumentException(
+                "At least one assembly must be provided for type metadata registration. " +
+                "Pass assemblies explicitly (e.g., typeof(MyEvent).Assembly) or use a marker-type overload (e.g., AddEventStore<TMarker>).",
+                nameof(assemblies));
+        }
+
         // Register type metadata registry as singleton
         services.TryAddSingleton<ITypeMetadataRegistry>(sp =>
         {
             var builder = new TypeMetadataRegistryBuilder();
-
-            // If no assemblies specified, use calling assembly
-            if (assemblies == null || assemblies.Length == 0)
-            {
-                // Add common assemblies
-                builder.AddAssembly(Assembly.GetCallingAssembly());
-            }
-            else
-            {
-                builder.AddAssemblies(assemblies);
-            }
-
+            builder.AddAssemblies(assemblies);
             return builder.Build();
         });
 
@@ -69,13 +67,68 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Adds all Event Store services using a marker type to identify the assembly containing attributed types.
+    /// </summary>
+    /// <typeparam name="TMarker">A type from the assembly to scan for attributed types.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="optionsAction">An action to configure the <see cref="DbContextOptionsBuilder"/> for the Event Store.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    /// <example>
+    /// <code>
+    /// // MyEvent is a type in the assembly you want to scan
+    /// services.AddEventStore&lt;MyEvent&gt;(options =>
+    /// {
+    ///     options.UseSqlServer(connectionString);
+    /// });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddEventStore<TMarker>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> optionsAction)
+    {
+        return services.AddEventStore(optionsAction, typeof(TMarker).Assembly);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using two marker types to identify assemblies containing attributed types.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="optionsAction">An action to configure the <see cref="DbContextOptionsBuilder"/> for the Event Store.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStore<TMarker1, TMarker2>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> optionsAction)
+    {
+        return services.AddEventStore(optionsAction, typeof(TMarker1).Assembly, typeof(TMarker2).Assembly);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using three marker types to identify assemblies containing attributed types.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <typeparam name="TMarker3">A type from the third assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="optionsAction">An action to configure the <see cref="DbContextOptionsBuilder"/> for the Event Store.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStore<TMarker1, TMarker2, TMarker3>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> optionsAction)
+    {
+        return services.AddEventStore(optionsAction, typeof(TMarker1).Assembly, typeof(TMarker2).Assembly, typeof(TMarker3).Assembly);
+    }
+
+    /// <summary>
     /// Adds all Event Store services using an in-memory database for testing purposes.
     /// All services are registered as Scoped.
     /// </summary>
     /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
     /// <param name="databaseName">The name of the in-memory database.</param>
-    /// <param name="assemblies">The assemblies to scan for attributed types. If not specified, only the calling assembly is scanned.</param>
+    /// <param name="assemblies">The assemblies to scan for attributed types. Must contain at least one assembly.</param>
     /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    /// <exception cref="ArgumentException">Thrown when no assemblies are provided.</exception>
     /// <example>
     /// <code>
     /// services.AddEventStoreInMemory("TestDb", typeof(MyEvent).Assembly);
@@ -96,13 +149,59 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Adds all Event Store services using an in-memory database with a marker type to identify the assembly.
+    /// </summary>
+    /// <typeparam name="TMarker">A type from the assembly to scan for attributed types.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="databaseName">The name of the in-memory database.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreInMemory<TMarker>(
+        this IServiceCollection services,
+        string databaseName)
+    {
+        return services.AddEventStoreInMemory(databaseName, typeof(TMarker).Assembly);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using an in-memory database with marker types to identify assemblies.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="databaseName">The name of the in-memory database.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreInMemory<TMarker1, TMarker2>(
+        this IServiceCollection services,
+        string databaseName)
+    {
+        return services.AddEventStoreInMemory(databaseName, typeof(TMarker1).Assembly, typeof(TMarker2).Assembly);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using an in-memory database with marker types to identify assemblies.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <typeparam name="TMarker3">A type from the third assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="databaseName">The name of the in-memory database.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreInMemory<TMarker1, TMarker2, TMarker3>(
+        this IServiceCollection services,
+        string databaseName)
+    {
+        return services.AddEventStoreInMemory(databaseName, typeof(TMarker1).Assembly, typeof(TMarker2).Assembly, typeof(TMarker3).Assembly);
+    }
+
+    /// <summary>
     /// Adds all Event Store services using SQL Server.
     /// </summary>
     /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
     /// <param name="connectionString">The connection string to use for SQL Server.</param>
-    /// <param name="assemblies">The assemblies to scan for attributed types.</param>
+    /// <param name="assemblies">The assemblies to scan for attributed types. Must contain at least one assembly.</param>
     /// <param name="sqlServerOptionsAction">An optional action to configure SQL Server specific options.</param>
     /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    /// <exception cref="ArgumentException">Thrown when no assemblies are provided.</exception>
     /// <example>
     /// <code>
     /// services.AddEventStoreSqlServer(connectionString, new[] { typeof(MyEvent).Assembly });
@@ -121,5 +220,56 @@ public static class ServiceCollectionExtensions
         {
             options.UseSqlServer(connectionString, sqlServerOptionsAction);
         }, assemblies);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using SQL Server with a marker type to identify the assembly.
+    /// </summary>
+    /// <typeparam name="TMarker">A type from the assembly to scan for attributed types.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="connectionString">The connection string to use for SQL Server.</param>
+    /// <param name="sqlServerOptionsAction">An optional action to configure SQL Server specific options.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreSqlServer<TMarker>(
+        this IServiceCollection services,
+        string connectionString,
+        Action<Microsoft.EntityFrameworkCore.Infrastructure.SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+    {
+        return services.AddEventStoreSqlServer(connectionString, new[] { typeof(TMarker).Assembly }, sqlServerOptionsAction);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using SQL Server with marker types to identify assemblies.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="connectionString">The connection string to use for SQL Server.</param>
+    /// <param name="sqlServerOptionsAction">An optional action to configure SQL Server specific options.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreSqlServer<TMarker1, TMarker2>(
+        this IServiceCollection services,
+        string connectionString,
+        Action<Microsoft.EntityFrameworkCore.Infrastructure.SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+    {
+        return services.AddEventStoreSqlServer(connectionString, new[] { typeof(TMarker1).Assembly, typeof(TMarker2).Assembly }, sqlServerOptionsAction);
+    }
+
+    /// <summary>
+    /// Adds all Event Store services using SQL Server with marker types to identify assemblies.
+    /// </summary>
+    /// <typeparam name="TMarker1">A type from the first assembly to scan.</typeparam>
+    /// <typeparam name="TMarker2">A type from the second assembly to scan.</typeparam>
+    /// <typeparam name="TMarker3">A type from the third assembly to scan.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="connectionString">The connection string to use for SQL Server.</param>
+    /// <param name="sqlServerOptionsAction">An optional action to configure SQL Server specific options.</param>
+    /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
+    public static IServiceCollection AddEventStoreSqlServer<TMarker1, TMarker2, TMarker3>(
+        this IServiceCollection services,
+        string connectionString,
+        Action<Microsoft.EntityFrameworkCore.Infrastructure.SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+    {
+        return services.AddEventStoreSqlServer(connectionString, new[] { typeof(TMarker1).Assembly, typeof(TMarker2).Assembly, typeof(TMarker3).Assembly }, sqlServerOptionsAction);
     }
 }

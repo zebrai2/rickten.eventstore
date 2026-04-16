@@ -20,7 +20,7 @@ public class ServiceCollectionExtensionsTests
         services.AddEventStore(options =>
         {
             options.UseInMemoryDatabase("TestDb");
-        });
+        }, typeof(OrderCreatedEvent).Assembly);
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -46,7 +46,7 @@ public class ServiceCollectionExtensionsTests
         services.AddEventStore(options =>
         {
             options.UseInMemoryDatabase("TestDb");
-        });
+        }, typeof(OrderCreatedEvent).Assembly);
 
         var eventStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEventStore));
         var snapshotStoreDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISnapshotStore));
@@ -65,8 +65,8 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
 
-        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb1"));
-        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb2"));
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb1"), typeof(OrderCreatedEvent).Assembly);
+        services.AddEventStore(options => options.UseInMemoryDatabase("TestDb2"), typeof(OrderCreatedEvent).Assembly);
 
         var eventStoreDescriptors = services.Where(d => d.ServiceType == typeof(IEventStore)).ToList();
         var snapshotStoreDescriptors = services.Where(d => d.ServiceType == typeof(ISnapshotStore)).ToList();
@@ -81,8 +81,8 @@ public class ServiceCollectionExtensionsTests
     public void AddEventStoreInMemory_RegistersAllServices()
     {
         var services = new ServiceCollection();
-        
-        services.AddEventStoreInMemory("TestDb");
+
+        services.AddEventStoreInMemory("TestDb", typeof(OrderCreatedEvent).Assembly);
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -99,8 +99,8 @@ public class ServiceCollectionExtensionsTests
     public void AddEventStoreSqlServer_RegistersAllServices()
     {
         var services = new ServiceCollection();
-        
-        services.AddEventStoreSqlServer("Server=localhost;Database=EventStore;", Array.Empty<Assembly>());
+
+        services.AddEventStoreSqlServer("Server=localhost;Database=EventStore;", new[] { typeof(OrderCreatedEvent).Assembly });
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -142,7 +142,7 @@ public class ServiceCollectionExtensionsTests
 
         Assert.Throws<ArgumentNullException>(() =>
         {
-            services.AddEventStore(options => { });
+            services.AddEventStore(options => { }, typeof(OrderCreatedEvent).Assembly);
         });
     }
 
@@ -153,7 +153,7 @@ public class ServiceCollectionExtensionsTests
 
         Assert.Throws<ArgumentNullException>(() =>
         {
-            services.AddEventStore(null!);
+            services.AddEventStore(null!, typeof(OrderCreatedEvent).Assembly);
         });
     }
 
@@ -164,7 +164,7 @@ public class ServiceCollectionExtensionsTests
 
         Assert.Throws<ArgumentNullException>(() =>
         {
-            services.AddEventStoreInMemory(null!);
+            services.AddEventStoreInMemory(null!, typeof(OrderCreatedEvent).Assembly);
         });
     }
 
@@ -179,7 +179,207 @@ public class ServiceCollectionExtensionsTests
         });
     }
 
+    [Fact]
+    public void AddEventStore_ThrowsWhenNoAssembliesProvided()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+        {
+            services.AddEventStore(options => options.UseInMemoryDatabase("TestDb"));
+        });
+
+        Assert.Contains("At least one assembly must be provided", exception.Message);
+        Assert.Contains("type metadata registration", exception.Message);
+    }
+
+    [Fact]
+    public void AddEventStore_ThrowsWhenEmptyAssemblyArrayProvided()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+        {
+            services.AddEventStore(options => options.UseInMemoryDatabase("TestDb"), Array.Empty<Assembly>());
+        });
+
+        Assert.Contains("At least one assembly must be provided", exception.Message);
+    }
+
+    [Fact]
+    public void AddEventStoreInMemory_ThrowsWhenNoAssembliesProvided()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+        {
+            services.AddEventStoreInMemory("TestDb");
+        });
+
+        Assert.Contains("At least one assembly must be provided", exception.Message);
+    }
+
+    [Fact]
+    public void AddEventStoreSqlServer_ThrowsWhenNoAssembliesProvided()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+        {
+            services.AddEventStoreSqlServer("Server=localhost;Database=EventStore;", Array.Empty<Assembly>());
+        });
+
+        Assert.Contains("At least one assembly must be provided", exception.Message);
+    }
+
+    [Fact]
+    public void AddEventStore_WithMarkerType_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStore<OrderCreatedEvent>(options =>
+        {
+            options.UseInMemoryDatabase("TestDb");
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
+        var projectionStore = serviceProvider.GetService<IProjectionStore>();
+
+        Assert.NotNull(eventStore);
+        Assert.NotNull(snapshotStore);
+        Assert.NotNull(projectionStore);
+    }
+
+    [Fact]
+    public void AddEventStore_WithTwoMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStore<OrderCreatedEvent, OrderUpdatedEvent>(options =>
+        {
+            options.UseInMemoryDatabase("TestDb");
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
+    [Fact]
+    public void AddEventStore_WithThreeMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStore<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>(options =>
+        {
+            options.UseInMemoryDatabase("TestDb");
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
+    [Fact]
+    public void AddEventStoreInMemory_WithMarkerType_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreInMemory<OrderCreatedEvent>("TestDb");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
+        var projectionStore = serviceProvider.GetService<IProjectionStore>();
+
+        Assert.NotNull(eventStore);
+        Assert.NotNull(snapshotStore);
+        Assert.NotNull(projectionStore);
+    }
+
+    [Fact]
+    public void AddEventStoreInMemory_WithTwoMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreInMemory<OrderCreatedEvent, OrderUpdatedEvent>("TestDb");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
+    [Fact]
+    public void AddEventStoreInMemory_WithThreeMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreInMemory<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>("TestDb");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
+    [Fact]
+    public void AddEventStoreSqlServer_WithMarkerType_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreSqlServer<OrderCreatedEvent>("Server=localhost;Database=EventStore;");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        var snapshotStore = serviceProvider.GetService<ISnapshotStore>();
+        var projectionStore = serviceProvider.GetService<IProjectionStore>();
+
+        Assert.NotNull(eventStore);
+        Assert.NotNull(snapshotStore);
+        Assert.NotNull(projectionStore);
+    }
+
+    [Fact]
+    public void AddEventStoreSqlServer_WithTwoMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreSqlServer<OrderCreatedEvent, OrderUpdatedEvent>("Server=localhost;Database=EventStore;");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
+    [Fact]
+    public void AddEventStoreSqlServer_WithThreeMarkerTypes_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddEventStoreSqlServer<OrderCreatedEvent, OrderUpdatedEvent, OrderDeletedEvent>("Server=localhost;Database=EventStore;");
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        var eventStore = serviceProvider.GetService<IEventStore>();
+        Assert.NotNull(eventStore);
+    }
+
     [Event("Order", "order-created", 1)]
     public record OrderCreatedEvent(decimal Amount);
+
+    [Event("Order", "order-updated", 1)]
+    public record OrderUpdatedEvent(decimal Amount);
+
+    [Event("Order", "order-deleted", 1)]
+    public record OrderDeletedEvent(string Reason);
 }
 
