@@ -7,9 +7,9 @@ using System;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Tests for WireTypeSerializer ensuring explicit registry-driven type resolution for aggregate state.
+/// Tests for WireTypeSerializer ensuring registry-driven type resolution for aggregate state.
 /// </summary>
-public class StateSerializerTests
+public class WireTypeSerializerStateTests
 {
     [Aggregate("TestAggregate")]
     public record TestState(string Name, int Value);

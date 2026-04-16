@@ -9,10 +9,10 @@ using System.Linq;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Unit tests for the WireTypeSerializer class, focusing on dynamic object
-/// deserialization and typed serialization.
+/// Tests for WireTypeSerializer focusing on plain JSON deserialization (dynamic objects)
+/// and typed serialization without registry-backed wire names.
 /// </summary>
-public class SerializerTests
+public class WireTypeSerializerJsonTests
 {
     #region Dynamic Object Deserialization
 

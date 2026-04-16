@@ -7,9 +7,9 @@ using System;
 namespace Rickten.EventStore.Tests;
 
 /// <summary>
-/// Tests for WireTypeSerializer with registry-backed wire name resolution.
+/// Tests for WireTypeSerializer with registry-backed wire name resolution for events.
 /// </summary>
-public class EventSerializerTests
+public class WireTypeSerializerEventTests
 {
     [Event("TestAggregate", "TestEvent", 1)]
     public record TestEvent(string Data, int Count);
