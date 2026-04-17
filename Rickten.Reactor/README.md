@@ -262,7 +262,7 @@ public sealed class MembershipDefinitionChangedReaction
    - Start from `Min(reactionPosition, projectionPosition)`
    - Use projection's aggregate/event type filters for efficiency
 3. **For each event**:
-   - **Always** apply event to reaction's private projection if newer than projection checkpoint
+   - **Always** apply projection events (respecting projection filters) if newer than projection checkpoint
    - **If event is a trigger** (matches `EventTypeFilter` and newer than reaction checkpoint):
      - Call `reaction.SelectStreams(projectionView, trigger)` to get target streams
      - For each selected stream:
@@ -358,7 +358,7 @@ Rickten.Reactor follows Rickten's design principles:
 - **Small primitives**: Base class, attribute, runner, store
 - **Explicit dependencies**: Reaction owns its projection
 - **Static runners**: No dependency injection required
-- **Explicit persistence**: `IReactionStore` interface
+- **Explicit persistence**: `IProjectionStore` interface with `"reaction"` namespace
 - **No hosting concerns**: Mechanism, not framework
 
 A future hosting/daemon project may call `ReactionRunner.CatchUpAsync` repeatedly, but that is out of scope for Rickten.Reactor itself.

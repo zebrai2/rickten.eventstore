@@ -49,7 +49,7 @@ Initially, we considered having reactions use `ProjectionRunner.RebuildUntilAsyn
 
 ### The Solution: Reaction-Owned Projection State
 
-Each reaction maintains **its own private projection state**, stored in `IReactionStore`, completely separate from any public `IProjectionStore` instances.
+Each reaction maintains **its own private projection state**, stored in `IProjectionStore` using the `"reaction"` namespace, completely separate from any public projections (which use the `"system"` namespace).
 
 **Public projection use:**
 ```csharp
@@ -63,8 +63,10 @@ await ProjectionRunner.CatchUpAsync(
 **Reaction projection use (internal):**
 ```csharp
 // ReactionRunner manages this automatically
-// Stores projection state in IReactionStore under the reaction key
-var projectionState = await reactionStore.LoadReactionProjectionAsync<TView>(reactionName);
+// Stores projection state in IProjectionStore with "reaction" namespace
+var projectionState = await projectionStore.LoadProjectionAsync<TView>(
+    projectionKey: reactionName,
+    @namespace: "reaction");
 ```
 
 ### Benefits

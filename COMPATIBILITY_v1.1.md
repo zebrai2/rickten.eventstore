@@ -6,7 +6,7 @@ This document verifies that v1.1 is backward compatible with v1.0 and justifies 
 
 ## Summary
 
-✅ **Version 1.1 is backward compatible** - Existing code will continue to work without modifications.
+✅ **Version 1.1 is backward compatible** - Existing application call sites using the official stores continue to work without modifications. Custom `IProjectionStore` implementations must be updated to add the namespace parameter.
 
 ## Interface Changes Analysis
 

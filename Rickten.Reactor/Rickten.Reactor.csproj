@@ -14,7 +14,7 @@
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.Reactor</Product>
-    <Description>Event-driven command execution for Rickten. Build reactions that transform events into commands using projection-based stream selection. Completes the Rickten triangle: Aggregator (Commands ? Events), Projector (Events ? Read Models), Reactor (Events ? Commands).</Description>
+    <Description>Event-driven command execution for Rickten. Build reactions that transform events into commands using projection-based stream selection. Completes the Rickten triangle: Aggregator (Commands -&gt; Events), Projector (Events -&gt; Read Models), Reactor (Events -&gt; Commands).</Description>
     <Copyright>Copyright (c) 2025 Rickten</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/zebrai2/rickten.eventstore</PackageProjectUrl>
