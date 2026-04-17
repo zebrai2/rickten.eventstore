@@ -5,7 +5,16 @@
 
 ## Overview
 
-Rickten v1.1 introduces **Rickten.Reactor**, completing the event sourcing triangle with event-driven command execution (events → commands). This release also enhances the projection storage infrastructure with namespace support, enabling shared databases between public and reaction-private projections.
+Rickten 1.1 introduces **Rickten.Reactor** and **projection namespaces**.
+
+Most applications using the official Entity Framework projection store can upgrade without changing call sites. Custom `IProjectionStore` implementations must be updated to support the new namespace-aware projection storage contract.
+
+### Compatibility Summary
+
+- **Application-level compatible** for standard usage
+- **Custom store implementers must update** (interface change)
+
+This is a feature release with a clear implementer note.
 
 ## What's New
 
@@ -93,34 +102,62 @@ await ReactionRunner.CatchUpAsync(
 - Added optional `namespace` parameter (default: `"system"`)
 - Maintains backward compatibility
 
-## Breaking Changes
+## Implementer Note
 
-### ⚠️ For Custom IProjectionStore Implementations Only
+### IProjectionStore Interface Enhancement
 
-If you have a custom `IProjectionStore` implementation, you need to add the `namespace` parameter:
+**Custom implementers must update** - The `IProjectionStore` interface now requires namespace-aware overloads:
 
 ```csharp
-// Add namespace parameter with default value
-Task<Projection<TState>?> LoadProjectionAsync<TState>(
-    string projectionKey,
-    string @namespace = "system",  // NEW
-    CancellationToken cancellationToken = default);
+public interface IProjectionStore
+{
+    // Existing overload (unchanged)
+    Task<Projection<TState>?> LoadProjectionAsync<TState>(
+        string projectionKey,
+        CancellationToken cancellationToken = default);
 
-Task SaveProjectionAsync<TState>(
-    string projectionKey,
-    long globalPosition,
-    TState state,
-    string @namespace = "system",  // NEW
-    CancellationToken cancellationToken = default);
+    // New overload - custom implementers must add
+    Task<Projection<TState>?> LoadProjectionAsync<TState>(
+        string projectionKey,
+        string @namespace,
+        CancellationToken cancellationToken = default);
+
+    // Same pattern for SaveProjectionAsync
+    Task SaveProjectionAsync<TState>(...);
+    Task SaveProjectionAsync<TState>(..., string @namespace, ...);
+}
 ```
 
-**Impact**: Most users rely on the built-in EntityFramework implementation (no changes required).
+**Who needs to update**:
+- ✅ **Standard users**: No changes needed (official `ProjectionStore` already updated)
+- ⚠️ **Custom implementers**: Must implement new overloads
 
-### ✅ No Breaking Changes for Standard Usage
+**Implementation pattern**:
+```csharp
+public class MyCustomProjectionStore : IProjectionStore
+{
+    // First overload delegates to second with "system" default
+    public Task<Projection<TState>?> LoadProjectionAsync<TState>(
+        string projectionKey,
+        CancellationToken cancellationToken = default)
+    {
+        return LoadProjectionAsync<TState>(projectionKey, "system", cancellationToken);
+    }
 
-- Existing code continues to work without modifications
-- Default parameter values ensure backward compatibility
-- Database migration automatically updates existing data
+    // Second overload contains actual implementation
+    public Task<Projection<TState>?> LoadProjectionAsync<TState>(
+        string projectionKey,
+        string @namespace,
+        CancellationToken cancellationToken = default)
+    {
+        // Filter by namespace: WHERE ProjectionKey = @key AND Namespace = @namespace
+    }
+
+    // Same pattern for SaveProjectionAsync...
+}
+```
+
+See [UPGRADE_v1.1.md](./UPGRADE_v1.1.md) for detailed implementation guidance.
 
 ## Database Migration
 
@@ -163,6 +200,7 @@ See [UPGRADE_v1.1.md](./UPGRADE_v1.1.md) for detailed upgrade instructions.
 - **Getting Started**: See package README files
 - **Upgrade Guide**: [UPGRADE_v1.1.md](./UPGRADE_v1.1.md)
 - **Compatibility**: [COMPATIBILITY_v1.1.md](./COMPATIBILITY_v1.1.md)
+- **Design Concepts**: [Rickten.Reactor/DESIGN_TRIANGLE.md](./Rickten.Reactor/DESIGN_TRIANGLE.md)
 - **Migration Guide**: [Migrations/README.md](./Rickten.EventStore.EntityFramework/Migrations/README.md)
 
 ## Requirements
