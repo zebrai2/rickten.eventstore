@@ -30,9 +30,18 @@ public sealed class ProjectionStore : IProjectionStore
         string projectionKey,
         CancellationToken cancellationToken = default)
     {
+        return await LoadProjectionAsync<TState>(projectionKey, "system", cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Projection<TState>?> LoadProjectionAsync<TState>(
+        string projectionKey,
+        string @namespace,
+        CancellationToken cancellationToken = default)
+    {
         var entity = await _context.Projections
             .FirstOrDefaultAsync(
-                p => p.ProjectionKey == projectionKey,
+                p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
                 cancellationToken);
 
         if (entity == null)
@@ -50,7 +59,7 @@ public sealed class ProjectionStore : IProjectionStore
             var requestedType = typeof(TState);
 
             throw new InvalidOperationException(
-                $"Projection state type mismatch for key '{projectionKey}'. " +
+                $"Projection state type mismatch for key '{projectionKey}' in namespace '{@namespace}'. " +
                 $"Stored wire type '{entity.StateType}' resolved to CLR type '{actualType.FullName}', " +
                 $"which is not assignable to requested type '{requestedType.FullName}'. " +
                 $"Ensure the projection state type matches the type used when saving.");
@@ -66,11 +75,22 @@ public sealed class ProjectionStore : IProjectionStore
         TState state,
         CancellationToken cancellationToken = default)
     {
+        await SaveProjectionAsync(projectionKey, globalPosition, state, "system", cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SaveProjectionAsync<TState>(
+        string projectionKey,
+        long globalPosition,
+        TState state,
+        string @namespace,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(state);
 
         var entity = await _context.Projections
             .FirstOrDefaultAsync(
-                p => p.ProjectionKey == projectionKey,
+                p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
                 cancellationToken);
 
         var serializedState = _serializer.Serialize(state);
@@ -80,6 +100,7 @@ public sealed class ProjectionStore : IProjectionStore
         {
             entity = new ProjectionEntity
             {
+                Namespace = @namespace,
                 ProjectionKey = projectionKey,
                 GlobalPosition = globalPosition,
                 StateType = stateType,

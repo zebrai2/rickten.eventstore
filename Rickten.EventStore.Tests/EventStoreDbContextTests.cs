@@ -223,6 +223,7 @@ public class EventStoreDbContextTests
         {
             var projection = new ProjectionEntity
             {
+                Namespace = "system",
                 ProjectionKey = "OrderSummary",
                 GlobalPosition = 100,
                 StateType = "TestProjection.State",

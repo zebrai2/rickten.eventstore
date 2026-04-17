@@ -115,7 +115,11 @@ public sealed class EventStoreDbContext : DbContext
         modelBuilder.Entity<ProjectionEntity>(entity =>
         {
             entity.ToTable("Projections");
-            entity.HasKey(e => e.ProjectionKey);
+            entity.HasKey(e => new { e.Namespace, e.ProjectionKey });
+
+            entity.Property(e => e.Namespace)
+                .IsRequired()
+                .HasMaxLength(255);
 
             entity.Property(e => e.ProjectionKey)
                 .IsRequired()
