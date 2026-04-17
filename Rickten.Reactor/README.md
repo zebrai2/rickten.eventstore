@@ -11,6 +11,69 @@ Rickten.Reactor completes the Rickten triangle:
 
 A **Reaction** uses a projection to identify which aggregate streams are affected by a trigger event, then executes commands against those streams through the existing aggregator pipeline.
 
+## Installation
+
+### NuGet Package
+
+```bash
+dotnet add package Rickten.Reactor --version 1.1.0
+```
+
+### Dependency Injection Setup
+
+Rickten.Reactor provides first-class DI registration support with assembly scanning:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Rickten.Reactor;
+
+// 1. Register Event Store with type metadata (required for reactions)
+services.AddEventStore(
+    options => options.UseSqlServer(connectionString),
+    typeof(MyEvent).Assembly,
+    typeof(MyReaction).Assembly);  // Include assemblies containing reactions
+
+// 2. Register all reactions from assemblies
+services.AddReactions(typeof(MyReaction).Assembly);
+
+// Or use marker types (recommended)
+services.AddReactions<MyReaction>();
+
+// Register reactions from multiple assemblies
+services.AddReactions<Reaction1, Reaction2>();
+services.AddReactions<Reaction1, Reaction2, Reaction3>();
+```
+
+**Important**: Reactions require `ITypeMetadataRegistry` for validation during construction. The same assemblies containing reactions must be registered with both `AddEventStore(...)` and `AddReactions(...)`.
+
+#### What Gets Registered
+
+`AddReactions` scans assemblies for:
+- Concrete, non-abstract classes
+- Decorated with `[Reaction]` attribute
+- Inheriting from `Reaction<TView, TCommand>`
+
+Each reaction type is registered as:
+1. **Concrete type** (transient) - for direct resolution
+2. **Closed base type** `Reaction<TView, TCommand>` (transient, enumerable) - for resolving all reactions of a specific type
+
+This enables both direct injection and collection injection:
+
+```csharp
+public class MyService
+{
+    // Direct injection
+    public MyService(MembershipReaction reaction) { }
+
+    // Collection injection - all reactions with same signature
+    public MyService(IEnumerable<Reaction<MembershipView, RecalculateCommand>> reactions) { }
+}
+```
+
+#### Safe Repeated Registration
+
+`AddReactions(...)` can be safely called multiple times with overlapping assemblies - duplicate registrations are automatically prevented using `TryAddTransient` and `TryAddEnumerable`.
+
 ## Key Concepts
 
 ### Reaction
@@ -90,7 +153,7 @@ public static class ReactionRunner
 {
     public static Task<long> CatchUpAsync<TState, TView, TCommand>(
         IEventStore eventStore,
-        IReactionStore reactionStore,
+        IProjectionStore projectionStore,  // Stores reaction checkpoints in "reaction" namespace
         Reaction<TView, TCommand> reaction,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
@@ -105,20 +168,13 @@ public static class ReactionRunner
 - ⚠️ **Warning**: When projection is ahead of reaction (indicates failure/recovery scenario)
 - ℹ️ **Info**: When projection is rebuilt for historical accuracy
 
-### Store
+### Checkpoint Storage
 
-```csharp
-public interface IReactionStore
-{
-    // Reaction checkpoint (last trigger event processed)
-    Task<long> LoadReactionAsync(string reactionKey, ...);
-    Task SaveReactionAsync(string reactionKey, long globalPosition, ...);
+Reactions use `IProjectionStore` with the `"reaction"` namespace to store:
+- **Reaction checkpoint** (`{reactionName}:trigger`) - Last trigger event processed
+- **Projection checkpoint** (`{reactionName}:projection`) - Last event applied to reaction's private projection
 
-    // Reaction's private projection state
-    Task<Projection<TView>?> LoadReactionProjectionAsync<TView>(string reactionKey, ...);
-    Task SaveReactionProjectionAsync<TView>(string reactionKey, long globalPosition, TView state, ...);
-}
-```
+This enables sharing the same database infrastructure with public projections (which use the `"system"` namespace) while maintaining logical separation.
 
 ## Example
 
@@ -199,9 +255,9 @@ public sealed class MembershipDefinitionChangedReaction
 
 `ReactionRunner.CatchUpAsync` behavior:
 
-1. **Load checkpoints** from `IReactionStore`:
-   - Reaction checkpoint: last trigger event successfully processed
-   - Projection checkpoint: last event applied to reaction's private projection
+1. **Load checkpoints** from `IProjectionStore` (using "reaction" namespace):
+   - Reaction checkpoint (`{name}:trigger`): last trigger event successfully processed
+   - Projection checkpoint (`{name}:projection`): last event applied to reaction's private projection
 2. **Read events** from `IEventStore.LoadAllAsync`:
    - Start from `Min(reactionPosition, projectionPosition)`
    - Use projection's aggregate/event type filters for efficiency
@@ -217,10 +273,10 @@ public sealed class MembershipDefinitionChangedReaction
 
 ### Reaction-Owned Projection State
 
-**Key insight**: Each reaction maintains its **own private projection state**, completely separate from any public projection stores.
+**Key insight**: Each reaction maintains its **own private projection state**, stored in `IProjectionStore` using the `"reaction"` namespace.
 
-- **Public projections**: Users run `ProjectionRunner.CatchUpAsync(eventStore, publicProjectionStore, projection, ...)`
-- **Reaction projections**: The reaction uses the same `IProjection<TView>` but stores state in `IReactionStore` (reaction-private)
+- **Public projections**: Use `ProjectionRunner.CatchUpAsync(eventStore, publicProjectionStore, projection, ...)` with default `"system"` namespace
+- **Reaction projections**: The reaction uses the same `IProjection<TView>` but stores state in the `"reaction"` namespace
 
 **Benefits:**
 - ✅ No API pollution - `ProjectionRunner` stays clean
@@ -228,6 +284,7 @@ public sealed class MembershipDefinitionChangedReaction
 - ✅ Performance - projection filters work normally
 - ✅ Independence - public and reaction projections have separate lifecycles
 - ✅ Simplicity - projection state is managed transparently by the runner
+- ✅ Shared infrastructure - same database table, separated by namespace
 
 **The projection view always represents deterministic state** because:
 1. It's caught up incrementally as events stream in
@@ -256,11 +313,13 @@ public sealed class MembershipDefinitionChangedReaction
 
 ### Included
 - `Reaction<TView, TCommand>` base class
-- `[Reaction]` attribute
-- `IReactionStore` interface (manages both reaction and projection checkpoints)
+- `[Reaction]` attribute with `ITypeMetadata` integration
 - `ReactionRunner` static runner
+- `ServiceCollectionExtensions` for DI registration
 - Projection-based stream selection
-- Reaction-owned projection state (private to each reaction)
+- Reaction-owned projection state (using `IProjectionStore` with "reaction" namespace)
+- TypeMetadataRegistry integration
+- Dual-checkpoint model with historical projection guarantee
 
 ### Not Included (Out of Scope for 1.1)
 - Hosted services / daemons
