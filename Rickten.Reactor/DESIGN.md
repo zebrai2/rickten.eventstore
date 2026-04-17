@@ -188,10 +188,18 @@ Currently, we save projection checkpoint with every reaction checkpoint. Could o
 - Trade-off: More events to replay on restart vs. more saves
 
 ### Projection Snapshotting
-For large projections, could extend `IReactionStore`:
+For large projections, could extend `IProjectionStore` with dedicated snapshotting methods:
 ```csharp
-Task<ProjectionSnapshot<TView>?> LoadReactionProjectionSnapshotAsync<TView>(...);
-Task SaveReactionProjectionSnapshotAsync<TView>(long position, TView state, ...);
+Task<ProjectionSnapshot<TView>?> LoadProjectionSnapshotAsync<TView>(
+    string projectionKey,
+    string @namespace,
+    ...);
+Task SaveProjectionSnapshotAsync<TView>(
+    string projectionKey,
+    long position,
+    TView state,
+    string @namespace,
+    ...);
 ```
 
 ### Multiple Reactions Sharing a Projection

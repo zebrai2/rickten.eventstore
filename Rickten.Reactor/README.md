@@ -357,7 +357,7 @@ This keeps reactions simple and composable.
 Rickten.Reactor follows Rickten's design principles:
 - **Small primitives**: Base class, attribute, runner, store
 - **Explicit dependencies**: Reaction owns its projection
-- **Static runners**: No dependency injection required
+- **Static runners**: `ReactionRunner` is a static utility; reactions themselves can be DI-registered
 - **Explicit persistence**: `IProjectionStore` interface with `"reaction"` namespace
 - **No hosting concerns**: Mechanism, not framework
 

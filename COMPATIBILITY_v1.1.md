@@ -1,8 +1,8 @@
 # Rickten v1.1 - Backward Compatibility Verification
 
-## Version: 1.1.0 (Non-Breaking Minor Release)
+## Version: 1.1.0 (Application-Compatible Minor Release)
 
-This document verifies that v1.1 is backward compatible with v1.0 and justifies the minor version bump rather than a major version change.
+This document verifies that v1.1 maintains application-level backward compatibility with v1.0 and justifies the minor version bump rather than a major version change. Custom `IProjectionStore` implementations require a simple update to add namespace parameters.
 
 ## Summary
 
