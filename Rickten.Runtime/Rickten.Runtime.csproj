@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+  </PropertyGroup>
+
+  <!-- Package Metadata -->
+  <PropertyGroup>
+    <PackageId>Rickten.Runtime</PackageId>
+    <Version>1.1.0</Version>
+    <Authors>Rickten</Authors>
+    <Company>Rickten</Company>
+    <Product>Rickten.Runtime</Product>
+    <Description>Generic execution layer for Rickten background processes. Provides hosted service infrastructure for running reactions and other Rickten components as long-lived background workers in ASP.NET Core and other hosting environments.</Description>
+    <Copyright>Copyright (c) 2025 Rickten</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/zebrai2/rickten.eventstore</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/zebrai2/rickten.eventstore</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>event-sourcing;runtime;background-services;hosting;dotnet;csharp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon-128.png</PackageIcon>
+    <PackageReleaseNotes>Initial release with reaction runtime support.</PackageReleaseNotes>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <!-- Documentation -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn> <!-- Disable missing XML comment warnings -->
+  </PropertyGroup>
+
+  <!-- Source Link (for debugging) -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Deterministic builds -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Include README in package -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\assets\icon\icon-128.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Source Link Package -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rickten.EventStore\Rickten.EventStore.csproj" />
+    <ProjectReference Include="..\Rickten.Aggregator\Rickten.Aggregator.csproj" />
+    <ProjectReference Include="..\Rickten.Reactor\Rickten.Reactor.csproj" />
+  </ItemGroup>
+
+</Project>
