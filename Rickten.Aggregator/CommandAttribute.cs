@@ -26,6 +26,13 @@ public sealed class CommandAttribute(string aggregate) : Attribute, ITypeMetadat
     /// </summary>
     public string? Description { get; init; }
 
+    /// <summary>
+    /// Gets or sets the version mode for this command.
+    /// LatestVersion (default): execute against the current aggregate stream version.
+    /// ExpectedVersion: execute only if the stream is still at the caller's expected version.
+    /// </summary>
+    public CommandVersionMode VersionMode { get; init; } = CommandVersionMode.LatestVersion;
+
     /// <inheritdoc />
     string? ITypeMetadata.GetWireName(Type decoratedType)
     {

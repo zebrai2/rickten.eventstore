@@ -57,8 +57,11 @@ public static class StateRunner
     // Load events from stream, validate ordering/completeness, fold into state
     Task<(TState State, long Version)> LoadStateAsync<TState>(...);
 
-    // Execute command, append events, return new state
+    // Execute command against latest state or expected version (based on command's VersionMode)
     Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(...);
+
+    // Execute command at explicit expected version (for CQRS stale-read protection)
+    Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAtVersionAsync<TState, TCommand>(...);
 }
 ```
 
@@ -114,17 +117,102 @@ This provides a complete optimization path for aggregates with long event histor
 
 ### [Command]
 
-Optional but recommended on command types for validation:
+Optional but recommended on command types for validation and version control:
 
 ```csharp
 [Command("SessionReview", Name = "Start Session", Description = "Starts a new review session")]
 public sealed record StartSession(string SessionId, string UserId) : SessionReviewCommand;
+
+[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
+public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
 ```
 
 Properties:
 - `Aggregate` (required) - Which aggregate the command belongs to
 - `Name` (optional) - Human-readable command name
 - `Description` (optional) - What the command does
+- `VersionMode` (optional, default `LatestVersion`) - Controls command execution version semantics
+
+## Command Version Modes
+
+Commands can execute against either the latest aggregate state or a caller-provided expected version for CQRS stale-read protection:
+
+### LatestVersion (Default)
+
+Execute against the current aggregate stream version at command execution time. Suitable for most commands, including Reactor side effects.
+
+```csharp
+[Command("Order", VersionMode = CommandVersionMode.LatestVersion)]
+public sealed record CancelOrder(string OrderId) : OrderCommand;
+
+// Execute against latest state
+await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new CancelOrder("order-1"));
+```
+
+### ExpectedVersion
+
+Execute only if the stream is still at the caller's expected version. Use this for CQRS command handling where the user's decision was based on a specific read model version.
+
+```csharp
+[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
+public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
+
+// User observed version 5 from read model
+var order = await readModel.GetOrder("order-1"); // returns version 5
+
+// Command will only execute if stream is still at version 5
+var command = new ApproveOrder("order-1", ExpectedVersion: order.Version);
+var result = await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, command);
+```
+
+If the stream version has changed since the user's decision, `ExecuteAsync` throws `StreamVersionConflictException` **before** running the command decider.
+
+### IExpectedVersionCommand
+
+Commands with `VersionMode = ExpectedVersion` must implement this interface to carry the expected version:
+
+```csharp
+public interface IExpectedVersionCommand
+{
+    long ExpectedVersion { get; }
+}
+
+// Example implementation
+[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
+public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
+```
+
+### ExecuteAtVersionAsync
+
+For explicit expected version execution without encoding it in the command:
+
+```csharp
+// Separate expected version from command
+var command = new CancelOrder("order-1");
+var result = await StateRunner.ExecuteAtVersionAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    command,
+    expectedVersion: 5);
+```
+
+This method always uses the explicit `expectedVersion` parameter regardless of the command's `VersionMode`.
+
+### Version Mode Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| LatestVersion command via `ExecuteAsync` | Loads latest state, executes command |
+| ExpectedVersion command + `IExpectedVersionCommand` | Validates version matches before execution |
+| ExpectedVersion command without interface | Throws `InvalidOperationException` |
+| Any command via `ExecuteAtVersionAsync` | Uses explicit expected version parameter |
+| Version mismatch | Throws `StreamVersionConflictException` before deciding |
+| Idempotent command at expected version | Returns success with no events |
+| New stream (version 0) | Works correctly with expected version 0 |
+
+**Important:** Version validation happens **before** the command decider runs. If the stream version doesn't match, the command is never executed because the user's decision was based on stale state.
 
 ## Quick Start
 

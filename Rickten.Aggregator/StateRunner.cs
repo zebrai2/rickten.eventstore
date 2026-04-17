@@ -1,4 +1,5 @@
 using Rickten.EventStore;
+using System.Reflection;
 
 namespace Rickten.Aggregator;
 
@@ -98,8 +99,9 @@ public static class StateRunner
     }
 
     /// <summary>
-    /// Executes a command and returns events to append.
+    /// Executes a command against the current aggregate state.
     /// If the folder has SnapshotInterval > 0, automatically saves snapshots at the configured interval.
+    /// For commands with VersionMode = ExpectedVersion, validates the stream version before execution.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <typeparam name="TCommand">The command type.</typeparam>
@@ -122,8 +124,103 @@ public static class StateRunner
         IReadOnlyList<AppendMetadata>? metadata = null,
         CancellationToken cancellationToken = default)
     {
+        // Determine version mode and expected version from command
+        var commandType = command!.GetType();
+        var commandAttr = commandType.GetCustomAttribute<CommandAttribute>();
+        var versionMode = commandAttr?.VersionMode ?? CommandVersionMode.LatestVersion;
+
+        long? expectedVersion = null;
+
+        if (versionMode == CommandVersionMode.ExpectedVersion)
+        {
+            // Command requires expected version
+            if (command is IExpectedVersionCommand expectedVersionCommand)
+            {
+                expectedVersion = expectedVersionCommand.ExpectedVersion;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Command '{commandType.Name}' has VersionMode = ExpectedVersion but does not implement IExpectedVersionCommand. " +
+                    $"Either add 'long ExpectedVersion' property and implement IExpectedVersionCommand, or change VersionMode to LatestVersion.");
+            }
+        }
+
+        return await ExecuteCoreAsync(
+            eventStore,
+            folder,
+            decider,
+            streamIdentifier,
+            command,
+            expectedVersion,
+            snapshotStore,
+            metadata,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a command against a specific expected stream version for optimistic concurrency control.
+    /// Use this when you want to explicitly provide the expected version separately from the command.
+    /// Throws StreamVersionConflictException if the current stream version does not match the expected version.
+    /// </summary>
+    /// <typeparam name="TState">The aggregate state type.</typeparam>
+    /// <typeparam name="TCommand">The command type.</typeparam>
+    /// <param name="eventStore">The event store.</param>
+    /// <param name="folder">The state folder.</param>
+    /// <param name="decider">The command decider.</param>
+    /// <param name="streamIdentifier">The stream identifier.</param>
+    /// <param name="command">The command to execute.</param>
+    /// <param name="expectedVersion">The expected stream version.</param>
+    /// <param name="snapshotStore">Optional snapshot store for automatic snapshots.</param>
+    /// <param name="metadata">Optional metadata to attach to events.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The new state, version, and appended events.</returns>
+    public static Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAtVersionAsync<TState, TCommand>(
+        IEventStore eventStore,
+        IStateFolder<TState> folder,
+        ICommandDecider<TState, TCommand> decider,
+        StreamIdentifier streamIdentifier,
+        TCommand command,
+        long expectedVersion,
+        ISnapshotStore? snapshotStore = null,
+        IReadOnlyList<AppendMetadata>? metadata = null,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteCoreAsync(
+            eventStore,
+            folder,
+            decider,
+            streamIdentifier,
+            command,
+            expectedVersion,
+            snapshotStore,
+            metadata,
+            cancellationToken);
+    }
+
+    private static async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteCoreAsync<TState, TCommand>(
+        IEventStore eventStore,
+        IStateFolder<TState> folder,
+        ICommandDecider<TState, TCommand> decider,
+        StreamIdentifier streamIdentifier,
+        TCommand command,
+        long? expectedVersion,
+        ISnapshotStore? snapshotStore,
+        IReadOnlyList<AppendMetadata>? metadata,
+        CancellationToken cancellationToken)
+    {
         // Load current state (with snapshot optimization if available)
         var (state, currentVersion) = await LoadStateAsync(eventStore, folder, streamIdentifier, snapshotStore, cancellationToken);
+
+        // If expected version is specified, validate it matches current version before deciding
+        if (expectedVersion.HasValue && currentVersion != expectedVersion.Value)
+        {
+            throw new StreamVersionConflictException(
+                new StreamPointer(streamIdentifier, expectedVersion.Value),
+                new StreamPointer(streamIdentifier, currentVersion),
+                $"Stream version conflict: expected version {expectedVersion.Value}, but current version is {currentVersion}. " +
+                $"The stream has changed since the decision was made.");
+        }
 
         // Execute command to get events
         var events = decider.Execute(state, command);
@@ -134,8 +231,9 @@ public static class StateRunner
             return (state, currentVersion, []);
         }
 
-        // Append events to store with current version
-        var pointer = new StreamPointer(streamIdentifier, currentVersion);
+        // Append events to store with current version (or expected version if specified)
+        var appendVersion = expectedVersion ?? currentVersion;
+        var pointer = new StreamPointer(streamIdentifier, appendVersion);
         var appendEvents = events.Select(e => new AppendEvent(e, metadata)).ToList();
         var appendedEvents = await eventStore.AppendAsync(pointer, appendEvents, cancellationToken);
 
