@@ -919,8 +919,8 @@ public class OrderQueryHandler
 ### Included Providers
 
 **Rickten.EventStore.EntityFramework includes:**
-- ✅ **SQL Server** - First-class support with `AddEventStoreSqlServer()` helper methods
-- ✅ **InMemory** - First-class support with `AddEventStoreInMemory()` helper methods for testing
+- **SQL Server** - First-class support with `AddEventStoreSqlServer()` helper methods
+- **InMemory** - First-class support with `AddEventStoreInMemory()` helper methods for testing
 
 ### SQL Server
 

@@ -5,8 +5,8 @@ Complete API documentation for Rickten.EventStore.
 ## EF Core Provider Support
 
 **Rickten.EventStore.EntityFramework includes:**
-- ? **SQL Server** - Bundled with first-class `AddEventStoreSqlServer()` helper methods
-- ? **InMemory** - Bundled with first-class `AddEventStoreInMemory()` helper methods for testing
+- **SQL Server** - Bundled with first-class `AddEventStoreSqlServer()` helper methods
+- **InMemory** - Bundled with first-class `AddEventStoreInMemory()` helper methods for testing
 
 **Other EF Core providers** (PostgreSQL, SQLite, MySQL, Oracle, etc.) are supported through the generic `AddEventStore(options => ...)` method. To use these providers:
 1. Install the provider package in your application (e.g., `Npgsql.EntityFrameworkCore.PostgreSQL` or `Microsoft.EntityFrameworkCore.Sqlite`)
