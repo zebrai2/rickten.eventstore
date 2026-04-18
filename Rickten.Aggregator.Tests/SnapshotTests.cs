@@ -7,6 +7,8 @@ namespace Rickten.Aggregator.Tests;
 
 public class SnapshotTests
 {
+    private readonly IStateRunner _stateRunner = new StateRunner();
+
     [Fact]
     public void AggregateAttribute_DefaultSnapshotInterval_IsZero()
     {
@@ -42,7 +44,7 @@ public class SnapshotTests
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
 
-            var (state, version, events) = await StateRunner.ExecuteAsync(
+            var (state, version, events) = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -74,7 +76,7 @@ public class SnapshotTests
             // Execute multiple commands
             for (int i = 0; i < 10; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -107,7 +109,7 @@ public class SnapshotTests
             // Execute 50 commands (should snapshot at version 25 and 50)
             for (int i = 0; i < 50; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -144,7 +146,7 @@ public class SnapshotTests
             // Execute 26 commands (should only snapshot at version 25, not 26)
             for (int i = 0; i < 26; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -177,7 +179,7 @@ public class SnapshotTests
             // Set up state at version 25
             for (int i = 0; i < 25; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -191,7 +193,7 @@ public class SnapshotTests
             Assert.NotNull(snapshotBefore);
 
             // Execute idempotent command (returns no events)
-            await StateRunner.ExecuteAsync(
+            await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -224,7 +226,7 @@ public class SnapshotTests
             // Create 50 events (will snapshot at 25 and 50)
             for (int i = 0; i < 50; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -237,7 +239,7 @@ public class SnapshotTests
             // Add 10 more events after the snapshot
             for (int i = 0; i < 10; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -248,7 +250,7 @@ public class SnapshotTests
             }
 
             // Load state with snapshot - should start from version 50 snapshot
-            var (state, version) = await StateRunner.LoadStateAsync(
+            var (state, version) = await _stateRunner.LoadStateAsync(
                 eventStore,
                 folder,
                 streamId,
@@ -275,7 +277,7 @@ public class SnapshotTests
             // Create 30 events
             for (int i = 0; i < 30; i++)
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -285,7 +287,7 @@ public class SnapshotTests
             }
 
             // Load state without snapshot store - should load all events
-            var (state, version) = await StateRunner.LoadStateAsync(
+            var (state, version) = await _stateRunner.LoadStateAsync(
                 eventStore,
                 folder,
                 streamId);

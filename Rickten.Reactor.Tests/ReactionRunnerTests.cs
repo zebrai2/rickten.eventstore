@@ -240,6 +240,7 @@ public class ReactionRunnerTests : IDisposable
     private readonly Microsoft.Data.Sqlite.SqliteConnection _connection;
     private readonly IServiceProvider _serviceProvider;
     private readonly InMemoryProjectionStore _projectionStore;
+    private readonly IStateRunner _stateRunner = new StateRunner();
 
     public ReactionRunnerTests()
     {
@@ -295,7 +296,8 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Assert
         Assert.True(lastPosition > 0);
@@ -360,7 +362,8 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Add another definition change
         await eventStore.AppendAsync(new StreamPointer(defStream, 2), new List<AppendEvent>
@@ -375,7 +378,8 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Assert
         Assert.True(secondPosition > firstPosition);
@@ -428,7 +432,8 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Assert - Two definition changes occurred, but only the second one had a registered user
         // First definition change: no memberships yet (0 commands)
@@ -475,7 +480,8 @@ public class ReactionRunnerTests : IDisposable
             reaction1,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         var pos2 = await ReactionRunner.CatchUpAsync(
             eventStore,
@@ -483,7 +489,8 @@ public class ReactionRunnerTests : IDisposable
             reaction2,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Assert - both should have processed their respective events
         var checkpoint1 = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
@@ -569,7 +576,8 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
-            registry);
+            registry,
+            _stateRunner);
 
         // Assert
         Assert.True(finalPosition > firstTriggerPosition);
@@ -624,6 +632,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
+            _stateRunner,
             logger: logger);
 
         // Assert - verify warning was logged

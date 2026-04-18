@@ -10,6 +10,8 @@ namespace Rickten.Aggregator.Tests;
 /// </summary>
 public class CommandVersionModeTests
 {
+    private readonly IStateRunner _stateRunner = new StateRunner();
+
     [Fact]
     public void CommandAttribute_DefaultExpectedVersionKey_IsNull()
     {
@@ -48,7 +50,7 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "latest-version-test");
 
             // Act: Execute command without ExpectedVersionKey (default behavior)
-            var result = await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            var result = await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Assert
             Assert.Single(result.Events);
@@ -71,10 +73,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "expected-version-test");
 
             // Create initial version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Execute with expected version in metadata
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -104,15 +106,15 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "version-mismatch-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Advance to version 2
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act & Assert: Try to execute with stale expected version 1
             var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -146,7 +148,7 @@ public class CommandVersionModeTests
             // Act & Assert: Command has ExpectedVersionKey but metadata is missing
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -177,7 +179,7 @@ public class CommandVersionModeTests
             // Act & Assert: Metadata value cannot be converted to long
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -206,10 +208,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "int-metadata-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Pass int instead of long
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -239,10 +241,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "string-metadata-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Pass string that can be parsed as long
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -272,10 +274,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "idempotent-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Execute idempotent command at expected version
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -306,19 +308,19 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "snapshot-validation-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Save snapshot at version 1
             var snapshotPointer = new StreamPointer(streamId, 1);
             await snapshotStore.SaveSnapshotAsync(snapshotPointer, new MetadataVersionTestState(1));
 
             // Advance to version 2
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act & Assert: Expected version check happens with snapshot loading
             var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -349,7 +351,7 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "decider-not-run-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, trackingDecider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, trackingDecider, streamId, new LatestVersionCommand(), registry);
 
             // Reset tracking
             trackingDecider.ExecutedCommands.Clear();
@@ -357,7 +359,7 @@ public class CommandVersionModeTests
             // Act & Assert: Version mismatch should fail before decider runs
             await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     trackingDecider,
@@ -389,7 +391,7 @@ public class CommandVersionModeTests
             // Act & Assert: Metadata value is null
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     decider,
@@ -418,10 +420,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "short-metadata-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Pass short instead of long
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -451,10 +453,10 @@ public class CommandVersionModeTests
             var streamId = new StreamIdentifier("MetadataVersionTest", "metadata-filtering-test");
 
             // Create version 1
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Execute with expected version + additional metadata
-            var result = await StateRunner.ExecuteAsync(
+            var result = await _stateRunner.ExecuteAsync(
                 eventStore,
                 folder,
                 decider,
@@ -527,7 +529,7 @@ public class CommandVersionModeTests
             // Act & Assert: Should throw because command has attribute but isn't in the filtering registry
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await StateRunner.ExecuteAsync(
+                await _stateRunner.ExecuteAsync(
                     eventStore,
                     folder,
                     trackingDecider,

@@ -17,6 +17,7 @@ public class TraceIdentityAggregatorTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<EventStoreDbContext> _options;
+    private readonly IStateRunner _stateRunner = new StateRunner();
 
     public TraceIdentityAggregatorTests()
     {
@@ -108,7 +109,7 @@ public class TraceIdentityAggregatorTests : IDisposable
             new AppendMetadata(EventMetadataKeys.CorrelationId, providedCorrelationId)
         };
 
-        var result = await StateRunner.ExecuteAsync(
+        var result = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             decider,
@@ -137,7 +138,7 @@ public class TraceIdentityAggregatorTests : IDisposable
             new AppendMetadata(EventMetadataKeys.CausationId, providedCausationId)
         };
 
-        var result = await StateRunner.ExecuteAsync(
+        var result = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             decider,
@@ -162,7 +163,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p3");
 
-        var result = await StateRunner.ExecuteAsync(
+        var result = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             multiEventDecider,
@@ -189,7 +190,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p4");
 
-        var result = await StateRunner.ExecuteAsync(
+        var result = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             multiEventDecider,
@@ -217,7 +218,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var streamId = new StreamIdentifier("TraceProduct", "p5");
 
         // First command execution
-        var result1 = await StateRunner.ExecuteAsync(
+        var result1 = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             decider,
@@ -227,7 +228,7 @@ public class TraceIdentityAggregatorTests : IDisposable
 
         // Second command execution
         var changePriceDecider = new ChangePriceDecider();
-        var result2 = await StateRunner.ExecuteAsync(
+        var result2 = await _stateRunner.ExecuteAsync(
             eventStore,
             folder,
             changePriceDecider,

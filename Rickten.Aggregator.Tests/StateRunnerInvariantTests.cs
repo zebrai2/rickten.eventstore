@@ -14,6 +14,8 @@ namespace Rickten.Aggregator.Tests;
 /// </summary>
 public class StateRunnerInvariantTests
 {
+    private readonly IStateRunner _stateRunner = new StateRunner();
+
     [Fact]
     public async Task LoadStateAsync_WithValidStream_SuccessfullyLoadsState()
     {
@@ -37,7 +39,7 @@ public class StateRunnerInvariantTests
             });
 
             // Act
-            var (state, version) = await StateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
 
             // Assert
             Assert.Equal(3, state.Count);
@@ -59,7 +61,7 @@ public class StateRunnerInvariantTests
             var streamId = new StreamIdentifier("InvariantTest", "empty-stream");
 
             // Act: Load state from non-existent stream
-            var (state, version) = await StateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
 
             // Assert
             Assert.Equal(0, state.Count);
@@ -104,7 +106,7 @@ public class StateRunnerInvariantTests
             });
 
             // Act: Load with snapshot - should start from version 3
-            var (state, version) = await StateRunner.LoadStateAsync(eventStore, folder, streamId, snapshotStore);
+            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId, snapshotStore);
 
             // Assert: Should have folded events 4-7 onto snapshot
             Assert.Equal(7, state.Count);
@@ -143,7 +145,7 @@ public class StateRunnerInvariantTests
             Assert.Equal(3, result[2].StreamPointer.Version);
 
             // StateRunner should successfully load
-            var (state, version) = await StateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
             Assert.Equal(3, state.Count);
             Assert.Equal(3, version);
         }
@@ -236,14 +238,14 @@ public class StateRunnerInvariantTests
             var streamId = new StreamIdentifier("InvariantTest", "concurrency-test");
 
             // Create initial state
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Load state (version 1)
-            var (state1, version1) = await StateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state1, version1) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
             Assert.Equal(1, version1);
 
             // Execute another command to advance to version 2
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
+            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Try to execute using stale version 1 - should fail
             var stalePointer = new StreamPointer(streamId, version1);

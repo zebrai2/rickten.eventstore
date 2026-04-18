@@ -60,6 +60,7 @@ public static class ReactionRunner
     /// <param name="folder">The state folder for the target aggregate type.</param>
     /// <param name="decider">The command decider for the target aggregate type.</param>
     /// <param name="registry">The type metadata registry for resolving event and aggregate metadata.</param>
+    /// <param name="stateRunner">The state runner for executing commands against target aggregates.</param>
     /// <param name="snapshotStore">Optional snapshot store for target aggregate optimization.</param>
     /// <param name="reactionName">The name to use for storing the reaction checkpoints (defaults to reaction's name from [Reaction] attribute).</param>
     /// <param name="logger">Optional logger for diagnostic information. Recommended for production to detect checkpoint drift and rebuild scenarios.</param>
@@ -84,6 +85,7 @@ public static class ReactionRunner
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
         EventStore.TypeMetadata.ITypeMetadataRegistry registry,
+        IStateRunner stateRunner,
         ISnapshotStore? snapshotStore = null,
         string? reactionName = null,
         ILogger? logger = null,
@@ -214,7 +216,7 @@ public static class ReactionRunner
                 // Execute commands against each selected stream
                 foreach (var (targetStream, command) in commands)
                 {
-                    await StateRunner.ExecuteAsync(
+                    await stateRunner.ExecuteAsync(
                         eventStore,
                         folder,
                         decider,

@@ -5,7 +5,7 @@ namespace Rickten.Aggregator;
 /// <summary>
 /// Utilities for loading and folding event streams into aggregate state.
 /// </summary>
-public static class StateRunner
+public class StateRunner : IStateRunner
 {
     /// <summary>
     /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
@@ -19,7 +19,7 @@ public static class StateRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The current state and version.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
-    public static async Task<(TState State, long Version)> LoadStateAsync<TState>(
+    public async Task<(TState State, long Version)> LoadStateAsync<TState>(
         IEventStore eventStore,
         IStateFolder<TState> folder,
         StreamIdentifier streamIdentifier,
@@ -114,7 +114,7 @@ public static class StateRunner
     /// <param name="metadata">Optional metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, version, and appended events.</returns>
-    public static async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(
+    public async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(
         IEventStore eventStore,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
@@ -145,7 +145,7 @@ public static class StateRunner
     /// Extracts expected version from metadata if the command has an ExpectedVersionKey.
     /// Returns both the expected version and the key name so it can be filtered from persisted metadata.
     /// </summary>
-    private static (long? expectedVersion, string? expectedVersionKey) GetExpectedVersionFromMetadata<TCommand>(
+    private (long? expectedVersion, string? expectedVersionKey) GetExpectedVersionFromMetadata<TCommand>(
         TCommand command,
         IReadOnlyList<AppendMetadata>? metadata,
         EventStore.TypeMetadata.ITypeMetadataRegistry registry)
@@ -215,7 +215,7 @@ public static class StateRunner
 
 
 
-    private static async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteCoreAsync<TState, TCommand>(
+    private async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteCoreAsync<TState, TCommand>(
         IEventStore eventStore,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
