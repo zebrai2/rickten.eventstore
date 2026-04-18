@@ -68,23 +68,21 @@ public sealed class SnapshotStore : ISnapshotStore
     {
         var serializedState = _serializer.Serialize(state);
         var stateType = _serializer.GetWireName(state);
+        var now = DateTime.UtcNow;
 
-        while (true)
+        // Use ExecuteUpdate for real databases (atomic), fallback to tracked updates for InMemory
+        if (IsInMemoryProvider())
         {
-            var now = DateTime.UtcNow;
+            // InMemory fallback: load or create, update if monotonic, save
+            var entity = await _context.Snapshots
+                .FirstOrDefaultAsync(s => s.StreamType == streamPointer.Stream.StreamType
+                                       && s.StreamIdentifier == streamPointer.Stream.Identifier,
+                    cancellationToken);
 
-            // Check if snapshot exists (use AsNoTracking to avoid polluting change tracker)
-            var currentVersion = await _context.Snapshots
-                .AsNoTracking()
-                .Where(s => s.StreamType == streamPointer.Stream.StreamType
-                         && s.StreamIdentifier == streamPointer.Stream.Identifier)
-                .Select(s => (long?)s.Version)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (currentVersion == null)
+            if (entity == null)
             {
                 // Insert new snapshot
-                var entity = new SnapshotEntity
+                entity = new SnapshotEntity
                 {
                     StreamType = streamPointer.Stream.StreamType,
                     StreamIdentifier = streamPointer.Stream.Identifier,
@@ -94,53 +92,96 @@ public sealed class SnapshotStore : ISnapshotStore
                     CreatedAt = now
                 };
                 _context.Snapshots.Add(entity);
-
-                try
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    return; // Success
-                }
-                catch (DbUpdateException)
-                {
-                    // Another process inserted first, detach this entity and retry the update path
-                    _context.Entry(entity).State = EntityState.Detached;
-                    continue;
-                }
             }
-
-            // Check monotonic condition: only update if new version >= existing
-            if (streamPointer.Version < currentVersion.Value)
+            else if (streamPointer.Version >= entity.Version)
             {
-                // Stale save, silently ignore
+                // Update existing snapshot if not stale
+                entity.Version = streamPointer.Version;
+                entity.StateType = stateType;
+                entity.State = serializedState;
+                entity.CreatedAt = now;
+            }
+            else
+            {
+                // Stale save, ignore
                 return;
             }
 
-            // Use ExecuteUpdate for real databases (atomic), fallback to tracked updates for InMemory
-            if (IsInMemoryProvider())
-            {
-                // InMemory fallback: load, update, save (no race protection but acceptable for tests)
-                var entity = await _context.Snapshots
-                    .FirstAsync(s => s.StreamType == streamPointer.Stream.StreamType
-                                  && s.StreamIdentifier == streamPointer.Stream.Identifier,
-                        cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
-                // Re-check monotonic condition in case another test modified it
-                if (streamPointer.Version >= entity.Version)
-                {
-                    entity.Version = streamPointer.Version;
-                    entity.StateType = stateType;
-                    entity.State = serializedState;
-                    entity.CreatedAt = now;
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
-                return;
+        // Production path: try atomic conditional update first
+        var rowsAffected = await _context.Snapshots
+            .Where(s => s.StreamType == streamPointer.Stream.StreamType
+                     && s.StreamIdentifier == streamPointer.Stream.Identifier
+                     && s.Version <= streamPointer.Version)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(s => s.Version, streamPointer.Version)
+                .SetProperty(s => s.StateType, stateType)
+                .SetProperty(s => s.State, serializedState)
+                .SetProperty(s => s.CreatedAt, now),
+                cancellationToken);
+
+        if (rowsAffected > 0)
+        {
+            // Update succeeded
+            return;
+        }
+
+        // No row was updated - either doesn't exist or is newer than this save
+        var exists = await _context.Snapshots
+            .AsNoTracking()
+            .AnyAsync(s => s.StreamType == streamPointer.Stream.StreamType
+                        && s.StreamIdentifier == streamPointer.Stream.Identifier,
+                cancellationToken);
+
+        if (exists)
+        {
+            // Snapshot exists but is newer than this save - stale, silently return
+            return;
+        }
+
+        // Snapshot doesn't exist - try to insert
+        var insertEntity = new SnapshotEntity
+        {
+            StreamType = streamPointer.Stream.StreamType,
+            StreamIdentifier = streamPointer.Stream.Identifier,
+            Version = streamPointer.Version,
+            StateType = stateType,
+            State = serializedState,
+            CreatedAt = now
+        };
+        _context.Snapshots.Add(insertEntity);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return; // Insert succeeded
+        }
+        catch (DbUpdateException)
+        {
+            // Detach the failed insert to prevent tracking conflicts
+            _context.Entry(insertEntity).State = EntityState.Detached;
+
+            // Verify this was actually a duplicate-key race by checking if the row now exists
+            exists = await _context.Snapshots
+                .AsNoTracking()
+                .AnyAsync(s => s.StreamType == streamPointer.Stream.StreamType
+                            && s.StreamIdentifier == streamPointer.Stream.Identifier,
+                    cancellationToken);
+
+            if (!exists)
+            {
+                // Not a duplicate-key error, rethrow the original exception
+                throw;
             }
 
-            // Production path: atomic conditional update at database level
-            var rowsAffected = await _context.Snapshots
+            // Another process inserted first - perform one final conditional update
+            rowsAffected = await _context.Snapshots
                 .Where(s => s.StreamType == streamPointer.Stream.StreamType
                          && s.StreamIdentifier == streamPointer.Stream.Identifier
-                         && s.Version == currentVersion.Value)
+                         && s.Version <= streamPointer.Version)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(s => s.Version, streamPointer.Version)
                     .SetProperty(s => s.StateType, stateType)
@@ -148,13 +189,8 @@ public sealed class SnapshotStore : ISnapshotStore
                     .SetProperty(s => s.CreatedAt, now),
                     cancellationToken);
 
-            if (rowsAffected > 0)
-            {
-                // Update succeeded
-                return;
-            }
-
-            // Another process modified the snapshot between our read and update, retry
+            // Whether it updated or not, we're done - if it didn't update, the existing row is newer
+            return;
         }
     }
 }

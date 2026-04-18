@@ -103,22 +103,20 @@ public sealed class ProjectionStore : IProjectionStore
 
         var serializedState = _serializer.Serialize(state);
         var stateType = _serializer.GetWireName(state);
+        var now = DateTime.UtcNow;
 
-        while (true)
+        // Use ExecuteUpdate for real databases (atomic), fallback to tracked updates for InMemory
+        if (IsInMemoryProvider())
         {
-            var now = DateTime.UtcNow;
+            // InMemory fallback: load or create, update if monotonic, save
+            var entity = await _context.Projections
+                .FirstOrDefaultAsync(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
+                    cancellationToken);
 
-            // Check if projection exists (use AsNoTracking to avoid polluting change tracker)
-            var currentPosition = await _context.Projections
-                .AsNoTracking()
-                .Where(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey)
-                .Select(p => (long?)p.GlobalPosition)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (currentPosition == null)
+            if (entity == null)
             {
                 // Insert new projection
-                var entity = new ProjectionEntity
+                entity = new ProjectionEntity
                 {
                     Namespace = @namespace,
                     ProjectionKey = projectionKey,
@@ -128,52 +126,94 @@ public sealed class ProjectionStore : IProjectionStore
                     UpdatedAt = now
                 };
                 _context.Projections.Add(entity);
-
-                try
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    return; // Success
-                }
-                catch (DbUpdateException)
-                {
-                    // Another process inserted first, detach our failed insert and retry the update path
-                    _context.Entry(entity).State = EntityState.Detached;
-                    continue;
-                }
             }
-
-            // Check monotonic condition: only update if new position >= existing
-            if (globalPosition < currentPosition.Value)
+            else if (globalPosition >= entity.GlobalPosition)
             {
-                // Stale save, silently ignore
+                // Update existing projection if not stale
+                entity.GlobalPosition = globalPosition;
+                entity.StateType = stateType;
+                entity.State = serializedState;
+                entity.UpdatedAt = now;
+            }
+            else
+            {
+                // Stale save, ignore
                 return;
             }
 
-            // Use ExecuteUpdate for real databases (atomic), fallback to tracked updates for InMemory
-            if (IsInMemoryProvider())
-            {
-                // InMemory fallback: load, update, save (no race protection but acceptable for tests)
-                var entity = await _context.Projections
-                    .FirstAsync(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
-                        cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
-                // Re-check monotonic condition in case another test modified it
-                if (globalPosition >= entity.GlobalPosition)
-                {
-                    entity.GlobalPosition = globalPosition;
-                    entity.StateType = stateType;
-                    entity.State = serializedState;
-                    entity.UpdatedAt = now;
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
-                return;
+        // Production path: try atomic conditional update first
+        var rowsAffected = await _context.Projections
+            .Where(p => p.Namespace == @namespace 
+                     && p.ProjectionKey == projectionKey 
+                     && p.GlobalPosition <= globalPosition)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.GlobalPosition, globalPosition)
+                .SetProperty(p => p.StateType, stateType)
+                .SetProperty(p => p.State, serializedState)
+                .SetProperty(p => p.UpdatedAt, now),
+                cancellationToken);
+
+        if (rowsAffected > 0)
+        {
+            // Update succeeded
+            return;
+        }
+
+        // No row was updated - either doesn't exist or is newer than this save
+        var exists = await _context.Projections
+            .AsNoTracking()
+            .AnyAsync(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
+                cancellationToken);
+
+        if (exists)
+        {
+            // Projection exists but is newer than this save - stale, silently return
+            return;
+        }
+
+        // Projection doesn't exist - try to insert
+        var insertEntity = new ProjectionEntity
+        {
+            Namespace = @namespace,
+            ProjectionKey = projectionKey,
+            GlobalPosition = globalPosition,
+            StateType = stateType,
+            State = serializedState,
+            UpdatedAt = now
+        };
+        _context.Projections.Add(insertEntity);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return; // Insert succeeded
+        }
+        catch (DbUpdateException)
+        {
+            // Detach the failed insert to prevent tracking conflicts
+            _context.Entry(insertEntity).State = EntityState.Detached;
+
+            // Verify this was actually a duplicate-key race by checking if the row now exists
+            exists = await _context.Projections
+                .AsNoTracking()
+                .AnyAsync(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
+                    cancellationToken);
+
+            if (!exists)
+            {
+                // Not a duplicate-key error, rethrow the original exception
+                throw;
             }
 
-            // Production path: atomic conditional update at database level
-            var rowsAffected = await _context.Projections
+            // Another process inserted first - perform one final conditional update
+            rowsAffected = await _context.Projections
                 .Where(p => p.Namespace == @namespace 
                          && p.ProjectionKey == projectionKey 
-                         && p.GlobalPosition == currentPosition.Value)
+                         && p.GlobalPosition <= globalPosition)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(p => p.GlobalPosition, globalPosition)
                     .SetProperty(p => p.StateType, stateType)
@@ -181,13 +221,8 @@ public sealed class ProjectionStore : IProjectionStore
                     .SetProperty(p => p.UpdatedAt, now),
                     cancellationToken);
 
-            if (rowsAffected > 0)
-            {
-                // Update succeeded
-                return;
-            }
-
-            // Another process modified the projection between our read and update, retry
+            // Whether it updated or not, we're done - if it didn't update, the existing row is newer
+            return;
         }
     }
 }
