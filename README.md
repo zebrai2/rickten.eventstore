@@ -88,21 +88,27 @@ dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 
 ### ⚠️ Type Registration Requirement
 
-The event store uses a **type metadata registry** built at startup for efficient type resolution without runtime assembly scanning. You must register assemblies containing your events, aggregates, and commands:
+**You must explicitly register assemblies** containing your events, aggregates, projections, commands, and reactions. The event store uses a **type metadata registry** built at startup for efficient type resolution without runtime assembly scanning.
 
 ```csharp
 // Register assemblies when configuring the event store
 services.AddEventStoreSqlServer(
     connectionString,
-    typeof(MyEvent).Assembly,        // Assembly with events
-    typeof(MyAggregate).Assembly);   // Assembly with aggregates (if different)
+    new[] { typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly });
 
-// Or use AddEventStoreInMemory for testing
+// Or use a marker-type overload
+services.AddEventStoreSqlServer<MyEvent>(connectionString);
+
+// For testing with in-memory database
 services.AddEventStoreInMemory(
+    "TestDb",
     typeof(MyEvent).Assembly);
+
+// Or use marker-type overload for testing
+services.AddEventStoreInMemory<MyEvent>("TestDb");
 ```
 
-If you don't specify assemblies, only the calling assembly is registered by default.
+**Important:** If assemblies are not specified, the event store will throw an `ArgumentException`. There is no default or calling-assembly fallback.
 
 ## ⚡ Quick Start
 
@@ -351,13 +357,23 @@ var events = new[]
 Use this when all stores share the same database:
 
 ```csharp
-// In-memory (for testing)
-services.AddEventStoreInMemory("MyApp", typeof(MyEvent).Assembly);
+// In-memory (for testing) - must provide assemblies
+services.AddEventStoreInMemory(
+    "MyApp", 
+    typeof(MyEvent).Assembly);
 
-// SQL Server
-services.AddEventStoreSqlServer(connectionString, new[] { typeof(MyEvent).Assembly });
+// Or use marker-type overload
+services.AddEventStoreInMemory<MyEvent>("MyApp");
 
-// Custom configuration
+// SQL Server - must provide assemblies
+services.AddEventStoreSqlServer(
+    connectionString, 
+    new[] { typeof(MyEvent).Assembly });
+
+// Or use marker-type overload
+services.AddEventStoreSqlServer<MyEvent>(connectionString);
+
+// Custom configuration - must provide assemblies
 services.AddEventStore(options =>
 {
     options.UseSqlServer(connectionString, sqlOptions =>
@@ -369,6 +385,15 @@ services.AddEventStore(options =>
         sqlOptions.CommandTimeout(60);
     });
 }, typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly);
+
+// Or use marker-type overload with custom configuration
+services.AddEventStore<MyEvent>(options =>
+{
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure();
+    });
+});
 ```
 
 ## 📝 Working with Events
@@ -897,6 +922,7 @@ dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 ```
 
 ```csharp
+// Must provide assemblies
 services.AddEventStore(options =>
 {
     options.UseNpgsql(
@@ -906,6 +932,17 @@ services.AddEventStore(options =>
             npgsqlOptions.EnableRetryOnFailure(5);
         });
 }, typeof(MyEvent).Assembly);
+
+// Or use marker-type overload
+services.AddEventStore<MyEvent>(options =>
+{
+    options.UseNpgsql(
+        Configuration.GetConnectionString("EventStore"),
+        npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(5);
+        });
+});
 ```
 
 ### SQLite
@@ -915,10 +952,17 @@ dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 ```
 
 ```csharp
+// Must provide assemblies
 services.AddEventStore(options =>
 {
     options.UseSqlite("Data Source=eventstore.db");
 }, typeof(MyEvent).Assembly);
+
+// Or use marker-type overload
+services.AddEventStore<MyEvent>(options =>
+{
+    options.UseSqlite("Data Source=eventstore.db");
+});
 ```
 
 ### Migrations
@@ -953,7 +997,12 @@ public class OrderServiceTests
     private IServiceProvider GetServiceProvider()
     {
         var services = new ServiceCollection();
-        services.AddEventStoreInMemory(Guid.NewGuid().ToString());
+        // Must provide assemblies containing events, aggregates, etc.
+        services.AddEventStoreInMemory(
+            Guid.NewGuid().ToString(),
+            typeof(OrderCreatedEvent).Assembly);
+        // Or use marker-type overload:
+        // services.AddEventStoreInMemory<OrderCreatedEvent>(Guid.NewGuid().ToString());
         services.AddScoped<OrderService>();
         return services.BuildServiceProvider();
     }
@@ -1034,7 +1083,12 @@ public class OrderIntegrationTests : IClassFixture<WebApplicationFactory<Program
                 if (descriptor != null)
                     services.Remove(descriptor);
 
-                services.AddEventStoreInMemory(Guid.NewGuid().ToString());
+                // Must provide assemblies for type registration
+                services.AddEventStoreInMemory(
+                    Guid.NewGuid().ToString(),
+                    typeof(OrderCreatedEvent).Assembly);
+                // Or use marker-type overload:
+                // services.AddEventStoreInMemory<OrderCreatedEvent>(Guid.NewGuid().ToString());
             });
         });
     }
