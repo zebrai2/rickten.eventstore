@@ -57,11 +57,8 @@ public static class StateRunner
     // Load events from stream, validate ordering/completeness, fold into state
     Task<(TState State, long Version)> LoadStateAsync<TState>(...);
 
-    // Execute command against latest state or expected version (based on command's VersionMode)
+    // Execute command against latest state or expected version (based on command's ExpectedVersionKey)
     Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(...);
-
-    // Execute command at explicit expected version (for CQRS stale-read protection)
-    Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAtVersionAsync<TState, TCommand>(...);
 }
 ```
 
@@ -117,7 +114,7 @@ This provides a complete optimization path for aggregates with long event histor
 
 ### [Command]
 
-Optional but recommended on command types for validation and expected version control:
+**Required** for commands executed through StateRunner:
 
 ```csharp
 [Command("SessionReview", Name = "Start Session", Description = "Starts a new review session")]
@@ -145,17 +142,27 @@ By default, commands execute against the current aggregate stream version at exe
 [Command("Order")]
 public sealed record CancelOrder(string OrderId);
 
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
+
 // Execute against latest state
-await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new CancelOrder("order-1"));
+await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    new CancelOrder("order-1"),
+    registry);
 ```
 
 ### Expected Version (Metadata-Based)
 
-For CQRS command handling where the user's decision was based on a specific read model version, set `ExpectedVersionKey` on the `[Command]` attribute. The expected version is passed via metadata, not in the command payload.
+For CQRS command handling where the user's decision was based on a specific read model version, set `ExpectedVersionKey` on the `[Command]` attribute. The expected version is provided as metadata when executing the command.
 
 ```csharp
 [Command("Order", ExpectedVersionKey = "ExpectedVersion")]
 public sealed record ApproveOrder(string OrderId);
+
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
 
 // User observed version 5 from read model
 var order = await readModel.GetOrder("order-1"); // returns version 5
@@ -167,6 +174,7 @@ var result = await StateRunner.ExecuteAsync(
     decider,
     streamId,
     new ApproveOrder("order-1"),
+    registry,
     metadata: [
         new AppendMetadata("ExpectedVersion", order.Version),
         new AppendMetadata("CorrelationId", correlationId)
@@ -179,32 +187,14 @@ var result = await StateRunner.ExecuteAsync(
 2. Caller passes the expected version in metadata using the same key
 3. `StateRunner` extracts the expected version from metadata
 4. If stream version doesn't match, `StreamVersionConflictException` is thrown **before** the command decider runs
-5. The expected version is not part of the command payload
+5. The expected version metadata is **not persisted** with events
 
 **Benefits:**
 
 - Expected version is request context, not command data
 - Commands remain simple and focused on business intent
-- Same command type can be used with or without expected version
-- Metadata is consumed by StateRunner and not persisted with events
-
-### ExecuteAtVersionAsync
-
-For explicit expected version execution without using metadata:
-
-```csharp
-// Separate expected version from both command and metadata
-var command = new CancelOrder("order-1");
-var result = await StateRunner.ExecuteAtVersionAsync(
-    eventStore,
-    folder,
-    decider,
-    streamId,
-    command,
-    expectedVersion: 5);
-```
-
-This method always uses the explicit `expectedVersion` parameter and does not check for `ExpectedVersionKey` or metadata.
+- The command payload does not carry expected version; callers provide it as metadata when executing that command
+- Expected version metadata is consumed by StateRunner and not persisted with events
 
 ### Expected Version Behavior
 
@@ -214,7 +204,6 @@ This method always uses the explicit `expectedVersion` parameter and does not ch
 | Command with `ExpectedVersionKey` + matching metadata | Validates version matches before execution |
 | Command with `ExpectedVersionKey` but missing metadata | Throws `InvalidOperationException` |
 | Command with `ExpectedVersionKey` but invalid metadata value | Throws `InvalidOperationException` |
-| `ExecuteAtVersionAsync` | Uses explicit expected version parameter |
 | Version mismatch | Throws `StreamVersionConflictException` before deciding |
 | Idempotent command at expected version | Returns success with no events |
 | New stream (version 0) | Works correctly with expected version 0 |
@@ -353,9 +342,12 @@ public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewSt
 ### 6. Usage
 
 ```csharp
-var eventStore = ...; // IEventStore
-var snapshotStore = ...; // ISnapshotStore (optional)
-var folder = new SessionReviewStateFolder();
+using var scope = serviceProvider.CreateScope();
+
+var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
+var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>(); // optional
+var folder = new SessionReviewStateFolder(registry);
 var decider = new SessionReviewCommandDecider();
 
 // Use the helper to create stream identifier
@@ -369,6 +361,7 @@ var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
     decider,
     streamId,
     command,
+    registry,
     snapshotStore); // Optional: enables automatic snapshots
 
 Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
@@ -387,12 +380,18 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 }
 
 // In your code
+using var scope = serviceProvider.CreateScope();
+var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
+var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+
 var (state, version, events) = await StateRunner.ExecuteAsync(
     eventStore,
     folder,
     decider,
     streamId,
     command,
+    registry,
     snapshotStore); // Snapshot saved automatically at versions 50, 100, 150, etc.
 ```
 
@@ -402,19 +401,6 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 - Snapshots only saved when `snapshotStore` parameter is provided
 - Idempotent commands (no events) don't trigger snapshots
 - Exposed via `StateFolder<TState>.SnapshotInterval` property
-
-// Execute a command
-var command = new SessionReviewCommand.StartSession("session-1", "user-123");
-var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
-    eventStore,
-    folder,
-    decider,
-    streamId,
-    command);
-
-Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
-Console.WriteLine($"Events appended: {events.Count}");
-```
 
 ## Design Principles
 

@@ -213,47 +213,7 @@ public static class StateRunner
         return (version, expectedVersionKey);
     }
 
-    /// <summary>
-    /// Executes a command against a specific expected stream version for optimistic concurrency control.
-    /// Use this when you want to explicitly provide the expected version separately from the command.
-    /// Throws StreamVersionConflictException if the current stream version does not match the expected version.
-    /// </summary>
-    /// <typeparam name="TState">The aggregate state type.</typeparam>
-    /// <typeparam name="TCommand">The command type.</typeparam>
-    /// <param name="eventStore">The event store.</param>
-    /// <param name="folder">The state folder.</param>
-    /// <param name="decider">The command decider.</param>
-    /// <param name="streamIdentifier">The stream identifier.</param>
-    /// <param name="command">The command to execute.</param>
-    /// <param name="expectedVersion">The expected stream version.</param>
-    /// <param name="snapshotStore">Optional snapshot store for automatic snapshots.</param>
-    /// <param name="metadata">Optional metadata to attach to events.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The new state, version, and appended events.</returns>
-    public static Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAtVersionAsync<TState, TCommand>(
-        IEventStore eventStore,
-        IStateFolder<TState> folder,
-        ICommandDecider<TState, TCommand> decider,
-        StreamIdentifier streamIdentifier,
-        TCommand command,
-        long expectedVersion,
-        ISnapshotStore? snapshotStore = null,
-        IReadOnlyList<AppendMetadata>? metadata = null,
-        CancellationToken cancellationToken = default)
-    {
-        // ExecuteAtVersionAsync uses explicit version, no metadata key to filter
-        return ExecuteCoreAsync(
-            eventStore,
-            folder,
-            decider,
-            streamIdentifier,
-            command,
-            expectedVersion,
-            expectedVersionKey: null,
-            snapshotStore,
-            metadata,
-            cancellationToken);
-    }
+
 
     private static async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteCoreAsync<TState, TCommand>(
         IEventStore eventStore,
