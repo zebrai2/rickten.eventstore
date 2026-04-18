@@ -300,9 +300,13 @@ public class SnapshotTests
 [Aggregate("Test", SnapshotInterval = 25)]
 public record TestState(int Count);
 
+[Command("Test")]
 public abstract record TestCommand
 {
+    [Command("Test")]
     public record Increment : TestCommand;
+
+    [Command("Test")]
     public record Noop : TestCommand;
 }
 
@@ -338,8 +342,10 @@ public class TestCommandDecider : CommandDecider<TestState, TestCommand>
 [Aggregate("NoSnapshot")] // No SnapshotInterval - defaults to 0
 public record NoSnapshotState(int Count);
 
+[Command("NoSnapshot")]
 public abstract record NoSnapshotCommand
 {
+    [Command("NoSnapshot")]
     public record Increment : NoSnapshotCommand;
 }
 

@@ -631,6 +631,54 @@ public class CommandVersionModeTests
             Assert.Equal("user-456", userIdMetadata.Value?.ToString());
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_CommandWithAttributeButNotInRegistry_ThrowsInvalidOperationException()
+    {
+        // Arrange: Create registry that returns null for the command type (simulates misconfiguration)
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var fullRegistry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+
+            // Create a filtering registry that excludes UnregisteredExpectedVersionCommand
+            var filteringRegistry = new FilteringTypeMetadataRegistry(
+                fullRegistry,
+                excludeType: typeof(UnregisteredExpectedVersionCommand));
+
+            var folder = new MetadataVersionTestStateFolder(filteringRegistry);
+            var trackingDecider = new TrackingDecider();
+            var streamId = new StreamIdentifier("MetadataVersionTest", "unregistered-command-test");
+
+            // Create a command that has the attribute but will be filtered from registry
+            var unregisteredCommand = new UnregisteredExpectedVersionCommand("test-order");
+
+            // Act & Assert: Should throw because command has attribute but isn't in the filtering registry
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await StateRunner.ExecuteAsync(
+                    eventStore,
+                    folder,
+                    trackingDecider,
+                    streamId,
+                    unregisteredCommand,
+                    filteringRegistry,
+                    metadata: [new AppendMetadata("ExpectedVersion", 0L)]);
+            });
+
+            // Verify the exception explains this is a CRITICAL configuration error
+            Assert.Contains("CRITICAL CONFIGURATION ERROR", exception.Message);
+            Assert.Contains("UnregisteredExpectedVersionCommand", exception.Message);
+            Assert.Contains("is not registered in the type metadata registry", exception.Message);
+            Assert.Contains("fatal setup error", exception.Message);
+            Assert.Contains("must be fixed immediately", exception.Message);
+
+            // Verify decider was never called (exception thrown before execution)
+            Assert.Empty(trackingDecider.ExecutedCommands);
+        }
+    }
 }
 
 // Test domain for metadata-based version tests
@@ -648,6 +696,11 @@ public record ExpectedVersionCommand(string OrderId);
 
 [Command("MetadataVersionTest", ExpectedVersionKey = "ExpectedVersion")]
 public record IdempotentExpectedVersionCommand(string OrderId);
+
+// This command has [Command] attribute with ExpectedVersionKey but is NOT registered in TestServiceFactory
+// Used to test detection of misconfigured registry
+[Command("MetadataVersionTest", ExpectedVersionKey = "ExpectedVersion")]
+public record UnregisteredExpectedVersionCommand(string OrderId);
 
 public class MetadataVersionTestStateFolder : StateFolder<MetadataVersionTestState>
 {
@@ -683,5 +736,41 @@ public class TrackingDecider : CommandDecider<MetadataVersionTestState, object>
     {
         ExecutedCommands.Add(command);
         return Event(new MetadataVersionTestEvent());
+    }
+}
+
+/// <summary>
+/// Test helper that wraps a registry and filters out a specific type.
+/// Used to simulate misconfigured registry scenarios.
+/// </summary>
+internal class FilteringTypeMetadataRegistry : EventStore.TypeMetadata.ITypeMetadataRegistry
+{
+    private readonly EventStore.TypeMetadata.ITypeMetadataRegistry _inner;
+    private readonly Type _excludeType;
+
+    public FilteringTypeMetadataRegistry(EventStore.TypeMetadata.ITypeMetadataRegistry inner, Type excludeType)
+    {
+        _inner = inner;
+        _excludeType = excludeType;
+    }
+
+    public EventStore.TypeMetadata.TypeMetadata? GetMetadataByType(Type type)
+    {
+        // Return null for the excluded type to simulate it not being registered
+        if (type == _excludeType)
+        {
+            return null;
+        }
+        return _inner.GetMetadataByType(type);
+    }
+
+    public Type? GetTypeByWireName(string wireName)
+    {
+        return _inner.GetTypeByWireName(wireName);
+    }
+
+    public IReadOnlyCollection<Type> GetEventTypesForAggregate(string aggregateName)
+    {
+        return _inner.GetEventTypesForAggregate(aggregateName);
     }
 }

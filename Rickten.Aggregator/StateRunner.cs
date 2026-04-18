@@ -158,12 +158,20 @@ public static class StateRunner
 
         // Get command metadata from registry
         var typeMetadata = registry.GetMetadataByType(commandType);
-        if (typeMetadata?.AttributeInstance is not CommandAttribute commandAttr)
+
+        // CRITICAL: All commands must be registered in the registry
+        // This is a configuration error that must be fixed immediately
+        if (typeMetadata?.AttributeInstance is not CommandAttribute)
         {
-            // Command not registered or not a CommandAttribute - use latest version behavior
-            return (null, null);
+            throw new InvalidOperationException(
+                $"CRITICAL CONFIGURATION ERROR: Command type '{commandType.Name}' is not registered in the type metadata registry. " +
+                $"This is a fatal setup error that must be fixed immediately. " +
+                $"All command types must have a [Command] attribute and be registered via AddEventStore during service configuration. " +
+                $"Ensure the assembly containing '{commandType.Name}' is included in the AddEventStore call. " +
+                $"This error prevents command execution to avoid bypassing expected version validation.");
         }
 
+        var commandAttr = (CommandAttribute)typeMetadata.AttributeInstance;
         var expectedVersionKey = commandAttr.ExpectedVersionKey;
 
         // If no ExpectedVersionKey is specified, return null (latest-version behavior)
