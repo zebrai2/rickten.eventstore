@@ -9,21 +9,15 @@ namespace Rickten.EventStore.EntityFramework;
 /// Entity Framework Core implementation of <see cref="ISnapshotStore"/>.
 /// States must be decorated with [Aggregate] attribute for type resolution.
 /// </summary>
-public sealed class SnapshotStore : ISnapshotStore
+/// <remarks>
+/// Initializes a new instance of the <see cref="SnapshotStore"/> class.
+/// </remarks>
+/// <param name="context">The database context.</param>
+/// <param name="serializer">The wire type serializer.</param>
+public sealed class SnapshotStore(EventStoreDbContext context, WireTypeSerializer serializer) : ISnapshotStore
 {
-    private readonly EventStoreDbContext _context;
-    private readonly WireTypeSerializer _serializer;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SnapshotStore"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
-    /// <param name="registry">The type metadata registry.</param>
-    public SnapshotStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
-    {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
-        _serializer = new WireTypeSerializer(registry);
-    }
+    private readonly EventStoreDbContext _context = context ?? throw new ArgumentNullException(nameof(context));
+    private readonly WireTypeSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
 
     private bool IsInMemoryProvider()
     {

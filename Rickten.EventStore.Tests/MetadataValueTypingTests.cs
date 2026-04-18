@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Xunit;
 using Rickten.EventStore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 
 namespace Rickten.EventStore.Tests;
 
@@ -24,7 +25,7 @@ public class MetadataValueTypingTests
             .Options;
         var context = new EventStoreDbContext(options);
         var registry = TestTypeMetadataRegistry.Create();
-        return new EntityFramework.EventStore(context, registry);
+        return new EntityFramework.EventStore(context, registry, new WireTypeSerializer(registry));
     }
 
     private static StreamPointer MakePointer(string type, string id, long version)

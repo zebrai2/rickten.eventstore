@@ -59,6 +59,7 @@ public static class ReactionRunner
     /// <param name="reaction">The reaction to execute. The reaction owns its projection via the <see cref="Reaction{TView,TCommand}.Projection"/> property.</param>
     /// <param name="folder">The state folder for the target aggregate type.</param>
     /// <param name="decider">The command decider for the target aggregate type.</param>
+    /// <param name="registry">The type metadata registry for resolving event and aggregate metadata.</param>
     /// <param name="snapshotStore">Optional snapshot store for target aggregate optimization.</param>
     /// <param name="reactionName">The name to use for storing the reaction checkpoints (defaults to reaction's name from [Reaction] attribute).</param>
     /// <param name="logger">Optional logger for diagnostic information. Recommended for production to detect checkpoint drift and rebuild scenarios.</param>
@@ -189,6 +190,25 @@ public static class ReactionRunner
                 // Process trigger event with current projection view
                 var commands = reaction.Process(projectionView, streamEvent);
 
+                // Build metadata for outgoing commands from the trigger event
+                // Propagate CorrelationId from trigger, set CausationId to trigger's EventId
+                var reactionMetadata = new List<AppendMetadata>();
+
+                // Propagate CorrelationId if present in trigger event
+                var triggerCorrelationId = streamEvent.Metadata.GetCorrelationId();
+                if (triggerCorrelationId.HasValue)
+                {
+                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CorrelationId, triggerCorrelationId.Value));
+                }
+
+                // Set CausationId to the trigger event's system-generated EventId
+                // Use GetSystemEventId to ensure we're using the authoritative system EventId
+                var triggerEventId = streamEvent.Metadata.GetSystemEventId();
+                if (triggerEventId.HasValue)
+                {
+                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CausationId, triggerEventId.Value));
+                }
+
                 // Execute commands against each selected stream
                 foreach (var (targetStream, command) in commands)
                 {
@@ -200,7 +220,7 @@ public static class ReactionRunner
                         command,
                         registry,
                         snapshotStore,
-                        metadata: null,
+                        metadata: reactionMetadata,
                         cancellationToken);
                 }
 

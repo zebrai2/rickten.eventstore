@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using Rickten.EventStore.TypeMetadata;
 using System;
@@ -41,7 +42,7 @@ public class EventStoreFilteringTests
         return new EventStoreDbContext(options);
     }
 
-    private EntityFramework.EventStore CreateStore(string dbName) => new EntityFramework.EventStore(CreateContext(dbName), Registry);
+    private EntityFramework.EventStore CreateStore(string dbName) => new EntityFramework.EventStore(CreateContext(dbName), Registry, new WireTypeSerializer(Registry));
 
     private StreamPointer MakePointer(string streamType, string streamId, long version) =>
         new StreamPointer(new StreamIdentifier(streamType, streamId), version);

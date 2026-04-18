@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using Rickten.EventStore.TypeMetadata;
 using System;
@@ -55,8 +56,8 @@ public abstract class EventStoreIntegrationTestsBase
     /// </summary>
     protected abstract void AssertProductCreatedEvent(object evt, string expectedName, decimal expectedPrice);
 
-    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry);
-    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext(), Registry);
+    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry, new WireTypeSerializer(Registry));
+    private EntityFramework.SnapshotStore CreateSnapshotStore() => new EntityFramework.SnapshotStore(CreateContext(), new WireTypeSerializer(Registry));
 
     [SkippableFact]
     public async Task ValueGeneratedOnAdd_AssignsSequentialIds()

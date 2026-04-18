@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework.Entities;
 using Rickten.EventStore.EntityFramework.Serialization;
@@ -9,21 +8,21 @@ namespace Rickten.EventStore.EntityFramework;
 /// <summary>
 /// Entity Framework Core implementation of <see cref="IEventStore"/>.
 /// </summary>
-public sealed class EventStore : IEventStore
+/// <remarks>
+/// Initializes a new instance of the <see cref="EventStore"/> class.
+/// </remarks>
+/// <param name="context">The database context.</param>
+/// <param name="registry">The type metadata registry.</param>
+/// <param name="serializer">The wire type serializer.</param>
+public sealed class EventStore(
+    EventStoreDbContext context, 
+    ITypeMetadataRegistry registry,
+    Serialization.WireTypeSerializer serializer) : IEventStore
 {
-    private readonly EventStoreDbContext _context;
-    private readonly WireTypeSerializer _serializer;
+    private readonly EventStoreDbContext _context = context ?? throw new ArgumentNullException(nameof(context));
+    private readonly ITypeMetadataRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+    private readonly Serialization.WireTypeSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EventStore"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
-    /// <param name="registry">The type metadata registry.</param>
-    public EventStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
-    {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
-        _serializer = new WireTypeSerializer(registry);
-    }
 
     /// <inheritdoc />
     public async IAsyncEnumerable<StreamEvent> LoadAsync(
@@ -105,15 +104,18 @@ public sealed class EventStore : IEventStore
         // Track the entities we're about to add so we can clean them up if the append fails
         var entitiesToAppend = new List<EventEntity>();
 
+        // Generate a shared BatchId for all events in this append operation
+        var batchId = Guid.NewGuid();
+
         foreach (var appendEvent in events)
         {
-            // Validate that event aggregate matches stream type
+            // Validate that event aggregate matches stream type using the registry
             var eventType = appendEvent.Event.GetType();
-            var eventAttribute = eventType.GetCustomAttribute<EventAttribute>();
-            if (eventAttribute != null && eventAttribute.Aggregate != expectedVersion.Stream.StreamType)
+            var eventMetadata = _registry.GetMetadataByType(eventType);
+            if (eventMetadata?.AggregateName != null && eventMetadata.AggregateName != expectedVersion.Stream.StreamType)
             {
                 throw new InvalidOperationException(
-                    $"Event aggregate '{eventAttribute.Aggregate}' does not match stream type '{expectedVersion.Stream.StreamType}'. " +
+                    $"Event aggregate '{eventMetadata.AggregateName}' does not match stream type '{expectedVersion.Stream.StreamType}'. " +
                     $"Event type: {eventType.FullName}");
             }
 
@@ -121,18 +123,32 @@ public sealed class EventStore : IEventStore
             // and add system metadata
             var metadata = new List<EventMetadata>();
 
-            // Add client metadata
+            // Add client metadata first
             if (appendEvent.Metadata != null)
             {
                 foreach (var clientMetadata in appendEvent.Metadata)
                 {
-                    metadata.Add(new EventMetadata("Client", clientMetadata.Key, clientMetadata.Value));
+                    metadata.Add(new EventMetadata(EventMetadataSource.Client, clientMetadata.Key, clientMetadata.Value));
                 }
             }
 
+            // Generate system EventId for this event
+            var eventId = Guid.NewGuid();
+
+            // Ensure CorrelationId: use caller-provided if present, otherwise generate
+            var existingCorrelationId = appendEvent.Metadata?.FirstOrDefault(m => m.Key == EventMetadataKeys.CorrelationId);
+            if (existingCorrelationId == null)
+            {
+                // No caller-provided CorrelationId, generate one
+                metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.CorrelationId, Guid.NewGuid()));
+            }
+            // Otherwise caller-provided CorrelationId is already in metadata with "Client" source
+
             // Add system metadata
-            metadata.Add(new EventMetadata("System", "Timestamp", DateTime.UtcNow));
-            metadata.Add(new EventMetadata("System", "StreamVersion", version));
+            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.EventId, eventId));
+            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.BatchId, batchId));
+            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.Timestamp, DateTime.UtcNow));
+            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.StreamVersion, version));
 
             var entity = new EventEntity
             {
