@@ -102,6 +102,9 @@ public sealed class EventStore : IEventStore
         // Events are 1-indexed; start from currentVersion + 1
         var version = currentVersion + 1;
 
+        // Track the entities we're about to add so we can clean them up if the append fails
+        var entitiesToAppend = new List<EventEntity>();
+
         foreach (var appendEvent in events)
         {
             // Validate that event aggregate matches stream type
@@ -143,6 +146,7 @@ public sealed class EventStore : IEventStore
             };
 
             _context.Events.Add(entity);
+            entitiesToAppend.Add(entity);
             version++;
         }
 
@@ -152,6 +156,14 @@ public sealed class EventStore : IEventStore
         }
         catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
         {
+            // Detach the failed entities from the context to prevent them from
+            // poisoning subsequent append attempts in the same scoped DbContext.
+            // This enables same-scope retry after catching StreamVersionConflictException.
+            foreach (var entity in entitiesToAppend)
+            {
+                _context.Entry(entity).State = EntityState.Detached;
+            }
+
             // Re-query to get the actual current version
             var actualVersion = await _context.Events
                 .Where(e => e.StreamType == expectedVersion.Stream.StreamType
