@@ -26,6 +26,14 @@ public sealed class CommandAttribute(string aggregate) : Attribute, ITypeMetadat
     /// </summary>
     public string? Description { get; init; }
 
+    /// <summary>
+    /// Gets or sets the metadata key for expected stream version.
+    /// When set, StateRunner will read the expected version from AppendMetadata
+    /// and only execute if the stream is still at that version.
+    /// Used for CQRS stale-read protection.
+    /// </summary>
+    public string? ExpectedVersionKey { get; init; }
+
     /// <inheritdoc />
     string? ITypeMetadata.GetWireName(Type decoratedType)
     {

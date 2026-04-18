@@ -48,6 +48,7 @@ public class SnapshotTests
                 decider,
                 streamId,
                 new TestCommand.Increment(),
+                registry,
                 snapshotStore: null);
 
             Assert.Equal(1, state.Count);
@@ -79,6 +80,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new NoSnapshotCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -111,6 +113,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new TestCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -147,6 +150,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new TestCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -179,6 +183,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new TestCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -192,6 +197,7 @@ public class SnapshotTests
                 decider,
                 streamId,
                 new TestCommand.Noop(),
+                registry,
                 snapshotStore);
 
             // Should still be at version 25 (no new snapshot)
@@ -224,6 +230,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new TestCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -236,6 +243,7 @@ public class SnapshotTests
                     decider,
                     streamId,
                     new TestCommand.Increment(),
+                    registry,
                     snapshotStore);
             }
 
@@ -272,7 +280,8 @@ public class SnapshotTests
                     folder,
                     decider,
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    registry);
             }
 
             // Load state without snapshot store - should load all events
@@ -291,9 +300,13 @@ public class SnapshotTests
 [Aggregate("Test", SnapshotInterval = 25)]
 public record TestState(int Count);
 
+[Command("Test")]
 public abstract record TestCommand
 {
+    [Command("Test")]
     public record Increment : TestCommand;
+
+    [Command("Test")]
     public record Noop : TestCommand;
 }
 
@@ -329,8 +342,10 @@ public class TestCommandDecider : CommandDecider<TestState, TestCommand>
 [Aggregate("NoSnapshot")] // No SnapshotInterval - defaults to 0
 public record NoSnapshotState(int Count);
 
+[Command("NoSnapshot")]
 public abstract record NoSnapshotCommand
 {
+    [Command("NoSnapshot")]
     public record Increment : NoSnapshotCommand;
 }
 

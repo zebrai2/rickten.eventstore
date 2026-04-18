@@ -236,14 +236,14 @@ public class StateRunnerInvariantTests
             var streamId = new StreamIdentifier("InvariantTest", "concurrency-test");
 
             // Create initial state
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand());
+            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Load state (version 1)
             var (state1, version1) = await StateRunner.LoadStateAsync(eventStore, folder, streamId);
             Assert.Equal(1, version1);
 
             // Execute another command to advance to version 2
-            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand());
+            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Try to execute using stale version 1 - should fail
             var stalePointer = new StreamPointer(streamId, version1);
