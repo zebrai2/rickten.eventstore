@@ -343,6 +343,20 @@ var events = new[]
 // - EventMetadata("System", "StreamVersion", 1)
 ```
 
+**Accessing Metadata Values:**
+
+After storage, metadata values materialize as `JsonElement` due to JSON serialization. Use extension methods for safe access:
+
+```csharp
+// When reading metadata from loaded events
+var timestamp = streamEvent.Metadata.GetDateTime("Timestamp");
+var userId = streamEvent.Metadata.GetString("UserId");
+var correlationId = streamEvent.Metadata.GetGuid("CorrelationId");
+
+// Available: GetString, GetDateTime, GetGuid, GetInt32, GetInt64, 
+//            GetDecimal, GetDouble, GetBoolean
+```
+
 **Source Types:**
 - **"Client"** - Automatically assigned to all client-provided metadata
 - **"System"** - Automatically added by the event store (Timestamp, StreamVersion, etc.)
