@@ -117,77 +117,83 @@ This provides a complete optimization path for aggregates with long event histor
 
 ### [Command]
 
-Optional but recommended on command types for validation and version control:
+Optional but recommended on command types for validation and expected version control:
 
 ```csharp
 [Command("SessionReview", Name = "Start Session", Description = "Starts a new review session")]
 public sealed record StartSession(string SessionId, string UserId) : SessionReviewCommand;
 
-[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
-public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
+[Command("Order", ExpectedVersionKey = "ExpectedVersion")]
+public sealed record ApproveOrder(string OrderId);
 ```
 
 Properties:
 - `Aggregate` (required) - Which aggregate the command belongs to
 - `Name` (optional) - Human-readable command name
 - `Description` (optional) - What the command does
-- `VersionMode` (optional, default `LatestVersion`) - Controls command execution version semantics
+- `ExpectedVersionKey` (optional) - Metadata key for expected stream version
 
-## Command Version Modes
+## Expected Stream Version Support
 
-Commands can execute against either the latest aggregate state or a caller-provided expected version for CQRS stale-read protection:
+Commands can execute against either the latest aggregate state (default) or a caller-provided expected version for CQRS stale-read protection.
 
-### LatestVersion (Default)
+### Default Behavior (Latest Version)
 
-Execute against the current aggregate stream version at command execution time. Suitable for most commands, including Reactor side effects.
+By default, commands execute against the current aggregate stream version at execution time. This is suitable for most commands, including Reactor side effects.
 
 ```csharp
-[Command("Order", VersionMode = CommandVersionMode.LatestVersion)]
-public sealed record CancelOrder(string OrderId) : OrderCommand;
+[Command("Order")]
+public sealed record CancelOrder(string OrderId);
 
 // Execute against latest state
 await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new CancelOrder("order-1"));
 ```
 
-### ExpectedVersion
+### Expected Version (Metadata-Based)
 
-Execute only if the stream is still at the caller's expected version. Use this for CQRS command handling where the user's decision was based on a specific read model version.
+For CQRS command handling where the user's decision was based on a specific read model version, set `ExpectedVersionKey` on the `[Command]` attribute. The expected version is passed via metadata, not in the command payload.
 
 ```csharp
-[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
-public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
+[Command("Order", ExpectedVersionKey = "ExpectedVersion")]
+public sealed record ApproveOrder(string OrderId);
 
 // User observed version 5 from read model
 var order = await readModel.GetOrder("order-1"); // returns version 5
 
 // Command will only execute if stream is still at version 5
-var command = new ApproveOrder("order-1", ExpectedVersion: order.Version);
-var result = await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, command);
+var result = await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    new ApproveOrder("order-1"),
+    metadata: [
+        new AppendMetadata("ExpectedVersion", order.Version),
+        new AppendMetadata("CorrelationId", correlationId)
+    ]);
 ```
 
-If the stream version has changed since the user's decision, `ExecuteAsync` throws `StreamVersionConflictException` **before** running the command decider.
+**How it works:**
 
-### IExpectedVersionCommand
+1. Command declares `ExpectedVersionKey = "ExpectedVersion"` in its `[Command]` attribute
+2. Caller passes the expected version in metadata using the same key
+3. `StateRunner` extracts the expected version from metadata
+4. If stream version doesn't match, `StreamVersionConflictException` is thrown **before** the command decider runs
+5. The expected version is not part of the command payload
 
-Commands with `VersionMode = ExpectedVersion` must implement this interface to carry the expected version:
+**Benefits:**
 
-```csharp
-public interface IExpectedVersionCommand
-{
-    long ExpectedVersion { get; }
-}
-
-// Example implementation
-[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
-public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
-```
+- Expected version is request context, not command data
+- Commands remain simple and focused on business intent
+- Same command type can be used with or without expected version
+- Metadata is consumed by StateRunner and not persisted with events
 
 ### ExecuteAtVersionAsync
 
-For explicit expected version execution without encoding it in the command:
+For explicit expected version execution without using metadata:
 
 ```csharp
-// Separate expected version from command
+// Separate expected version from both command and metadata
 var command = new CancelOrder("order-1");
 var result = await StateRunner.ExecuteAtVersionAsync(
     eventStore,
@@ -198,19 +204,27 @@ var result = await StateRunner.ExecuteAtVersionAsync(
     expectedVersion: 5);
 ```
 
-This method always uses the explicit `expectedVersion` parameter regardless of the command's `VersionMode`.
+This method always uses the explicit `expectedVersion` parameter and does not check for `ExpectedVersionKey` or metadata.
 
-### Version Mode Behavior
+### Expected Version Behavior
 
 | Scenario | Behavior |
 |----------|----------|
-| LatestVersion command via `ExecuteAsync` | Loads latest state, executes command |
-| ExpectedVersion command + `IExpectedVersionCommand` | Validates version matches before execution |
-| ExpectedVersion command without interface | Throws `InvalidOperationException` |
-| Any command via `ExecuteAtVersionAsync` | Uses explicit expected version parameter |
+| Command without `ExpectedVersionKey` | Executes against latest state |
+| Command with `ExpectedVersionKey` + matching metadata | Validates version matches before execution |
+| Command with `ExpectedVersionKey` but missing metadata | Throws `InvalidOperationException` |
+| Command with `ExpectedVersionKey` but invalid metadata value | Throws `InvalidOperationException` |
+| `ExecuteAtVersionAsync` | Uses explicit expected version parameter |
 | Version mismatch | Throws `StreamVersionConflictException` before deciding |
 | Idempotent command at expected version | Returns success with no events |
 | New stream (version 0) | Works correctly with expected version 0 |
+
+**Metadata Value Conversion:**
+
+The expected version metadata value is automatically converted from:
+- `long` - used directly
+- `int`, `short`, `byte` - converted to long
+- `string` - parsed as long if valid
 
 **Important:** Version validation happens **before** the command decider runs. If the stream version doesn't match, the command is never executed because the user's decision was based on stale state.
 

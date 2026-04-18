@@ -68,6 +68,49 @@ await ReactionRunner.CatchUpAsync(
     decider);
 ```
 
+### 🔐 Metadata-Based Expected Version Support
+
+**CQRS Stale-Read Protection**:
+- Commands can now require expected version via metadata instead of command payload
+- Expected version is request context, not command data
+- `CommandAttribute` now supports `ExpectedVersionKey` property
+- Replaces deprecated `CommandVersionMode` and `IExpectedVersionCommand`
+
+**Benefits**:
+- Commands remain simple and focused on business intent
+- Expected version is consumed by StateRunner, not persisted with events
+- Same command type can be used with or without expected version
+- Clear separation between command data and execution context
+
+**Example**:
+```csharp
+[Command("Order", ExpectedVersionKey = "ExpectedVersion")]
+public sealed record ApproveOrder(string OrderId);
+
+// User observed version 5 from read model
+var order = await readModel.GetOrder("order-1"); // returns version 5
+
+// Command will only execute if stream is still at version 5
+await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    new ApproveOrder("order-1"),
+    metadata: [
+        new AppendMetadata("ExpectedVersion", order.Version),
+        new AppendMetadata("CorrelationId", correlationId)
+    ]);
+```
+
+**Breaking Changes** (minor impact):
+- ⚠️ `CommandVersionMode` enum removed
+- ⚠️ `IExpectedVersionCommand` interface removed
+- ✅ Metadata-based approach is cleaner and more flexible
+- ✅ `ExecuteAtVersionAsync` remains for explicit version control
+
+See [Rickten.Aggregator README](./Rickten.Aggregator/README.md) for details.
+
 ### 🔧 Enhanced Projection Storage
 
 **Namespace Support**:

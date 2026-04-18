@@ -140,6 +140,66 @@ Namespace (PK) | ProjectionKey (PK) | GlobalPosition | State | ...
 - Uses `"reaction"` namespace for private projections
 - Does not affect existing code
 
+### Metadata-Based Expected Version Support
+
+**Status**: ⚠️ **BREAKING CHANGE** (affects commands using CommandVersionMode)
+
+**Removed**:
+- `CommandVersionMode` enum
+- `IExpectedVersionCommand` interface
+- `CommandAttribute.VersionMode` property
+
+**Added**:
+- `CommandAttribute.ExpectedVersionKey` property (optional)
+
+**Migration Required For**:
+- Commands previously using `[Command(..., VersionMode = CommandVersionMode.ExpectedVersion)]`
+- Commands implementing `IExpectedVersionCommand`
+
+**Migration Path**:
+
+**Before (v1.0)**:
+```csharp
+[Command("Order", VersionMode = CommandVersionMode.ExpectedVersion)]
+public sealed record ApproveOrder(string OrderId, long ExpectedVersion) : IExpectedVersionCommand;
+
+// Usage
+var command = new ApproveOrder("order-1", ExpectedVersion: 5);
+await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, command);
+```
+
+**After (v1.1)**:
+```csharp
+[Command("Order", ExpectedVersionKey = "ExpectedVersion")]
+public sealed record ApproveOrder(string OrderId);  // No ExpectedVersion property
+
+// Usage
+var command = new ApproveOrder("order-1");
+await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    command,
+    metadata: [new AppendMetadata("ExpectedVersion", 5L)]);
+```
+
+**Benefits**:
+- Expected version is request context, not command data
+- Commands remain simple and focused on business intent
+- Same command type can be used with or without expected version
+- Clearer separation between command data and execution context
+
+**Impact**: ⚠️ **COMPILE-TIME BREAKING** for commands using version mode
+- Most commands don't use expected version (no impact)
+- Commands using `ExpectedVersion` need to migrate to metadata approach
+- `ExecuteAtVersionAsync` remains unchanged for explicit version control
+
+**Recommendation**:
+- Commands that don't use expected version: ✅ No changes needed
+- Commands using `IExpectedVersionCommand`: Update to metadata-based approach
+- Consider using `ExecuteAtVersionAsync` for explicit control without metadata
+
 ## Custom Implementation Impact
 
 ### If You Have Custom IProjectionStore Implementations

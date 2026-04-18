@@ -1,5 +1,4 @@
 using Rickten.EventStore;
-using System.Reflection;
 
 namespace Rickten.Aggregator;
 
@@ -101,7 +100,7 @@ public static class StateRunner
     /// <summary>
     /// Executes a command against the current aggregate state.
     /// If the folder has SnapshotInterval > 0, automatically saves snapshots at the configured interval.
-    /// For commands with VersionMode = ExpectedVersion, validates the stream version before execution.
+    /// For commands with ExpectedVersionKey, validates the stream version from metadata before execution.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <typeparam name="TCommand">The command type.</typeparam>
@@ -110,6 +109,7 @@ public static class StateRunner
     /// <param name="decider">The command decider.</param>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
+    /// <param name="registry">The type metadata registry for command metadata lookup.</param>
     /// <param name="snapshotStore">Optional snapshot store for automatic snapshots.</param>
     /// <param name="metadata">Optional metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -120,31 +120,13 @@ public static class StateRunner
         ICommandDecider<TState, TCommand> decider,
         StreamIdentifier streamIdentifier,
         TCommand command,
+        EventStore.TypeMetadata.ITypeMetadataRegistry registry,
         ISnapshotStore? snapshotStore = null,
         IReadOnlyList<AppendMetadata>? metadata = null,
         CancellationToken cancellationToken = default)
     {
-        // Determine version mode and expected version from command
-        var commandType = command!.GetType();
-        var commandAttr = commandType.GetCustomAttribute<CommandAttribute>();
-        var versionMode = commandAttr?.VersionMode ?? CommandVersionMode.LatestVersion;
-
-        long? expectedVersion = null;
-
-        if (versionMode == CommandVersionMode.ExpectedVersion)
-        {
-            // Command requires expected version
-            if (command is IExpectedVersionCommand expectedVersionCommand)
-            {
-                expectedVersion = expectedVersionCommand.ExpectedVersion;
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"Command '{commandType.Name}' has VersionMode = ExpectedVersion but does not implement IExpectedVersionCommand. " +
-                    $"Either add 'long ExpectedVersion' property and implement IExpectedVersionCommand, or change VersionMode to LatestVersion.");
-            }
-        }
+        // Extract expected version from metadata if command declares ExpectedVersionKey
+        var expectedVersion = GetExpectedVersionFromMetadata(command, metadata, registry);
 
         return await ExecuteCoreAsync(
             eventStore,
@@ -156,6 +138,67 @@ public static class StateRunner
             snapshotStore,
             metadata,
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Extracts expected version from metadata if the command has an ExpectedVersionKey.
+    /// </summary>
+    private static long? GetExpectedVersionFromMetadata<TCommand>(
+        TCommand command,
+        IReadOnlyList<AppendMetadata>? metadata,
+        EventStore.TypeMetadata.ITypeMetadataRegistry registry)
+    {
+        var commandType = command?.GetType();
+        if (commandType == null)
+        {
+            return null;
+        }
+
+        // Get command metadata from registry
+        var typeMetadata = registry.GetMetadataByType(commandType);
+        if (typeMetadata?.AttributeInstance is not CommandAttribute commandAttr)
+        {
+            // Command not registered or not a CommandAttribute - use latest version behavior
+            return null;
+        }
+
+        var expectedVersionKey = commandAttr.ExpectedVersionKey;
+
+        // If no ExpectedVersionKey is specified, return null (latest-version behavior)
+        if (string.IsNullOrWhiteSpace(expectedVersionKey))
+        {
+            return null;
+        }
+
+        // Find metadata item with matching key
+        var metadataItem = metadata?.FirstOrDefault(m =>
+            string.Equals(m.Key, expectedVersionKey, StringComparison.Ordinal));
+
+        if (metadataItem == null)
+        {
+            throw new InvalidOperationException(
+                $"Command '{commandType.Name}' requires expected version metadata key '{expectedVersionKey}', but it was not provided.");
+        }
+
+        var metadataValue = metadataItem.Value;
+
+        if (metadataValue == null)
+        {
+            throw new InvalidOperationException(
+                $"Command '{commandType.Name}' requires expected version metadata key '{expectedVersionKey}', but the value was null.");
+        }
+
+        // Convert to long - support long, int, and parseable strings
+        return metadataValue switch
+        {
+            long longValue => longValue,
+            int intValue => intValue,
+            short shortValue => shortValue,
+            byte byteValue => byteValue,
+            string stringValue when long.TryParse(stringValue, out var parsedValue) => parsedValue,
+            _ => throw new InvalidOperationException(
+                $"Command '{commandType.Name}' expected version metadata key '{expectedVersionKey}' has value of type '{metadataValue.GetType().Name}' which cannot be converted to long.")
+        };
     }
 
     /// <summary>

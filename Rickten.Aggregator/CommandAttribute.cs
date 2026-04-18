@@ -27,11 +27,12 @@ public sealed class CommandAttribute(string aggregate) : Attribute, ITypeMetadat
     public string? Description { get; init; }
 
     /// <summary>
-    /// Gets or sets the version mode for this command.
-    /// LatestVersion (default): execute against the current aggregate stream version.
-    /// ExpectedVersion: execute only if the stream is still at the caller's expected version.
+    /// Gets or sets the metadata key for expected stream version.
+    /// When set, StateRunner will read the expected version from AppendMetadata
+    /// and only execute if the stream is still at that version.
+    /// Used for CQRS stale-read protection.
     /// </summary>
-    public CommandVersionMode VersionMode { get; init; } = CommandVersionMode.LatestVersion;
+    public string? ExpectedVersionKey { get; init; }
 
     /// <inheritdoc />
     string? ITypeMetadata.GetWireName(Type decoratedType)

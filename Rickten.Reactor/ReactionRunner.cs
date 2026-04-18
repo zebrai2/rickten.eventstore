@@ -82,6 +82,7 @@ public static class ReactionRunner
         Reaction<TView, TCommand> reaction,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
+        EventStore.TypeMetadata.ITypeMetadataRegistry registry,
         ISnapshotStore? snapshotStore = null,
         string? reactionName = null,
         ILogger? logger = null,
@@ -197,6 +198,7 @@ public static class ReactionRunner
                         decider,
                         targetStream,
                         command,
+                        registry,
                         snapshotStore,
                         metadata: null,
                         cancellationToken);

@@ -294,7 +294,8 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Assert
         Assert.True(lastPosition > 0);
@@ -358,7 +359,8 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Add another definition change
         await eventStore.AppendAsync(new StreamPointer(defStream, 2), new List<AppendEvent>
@@ -372,7 +374,8 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Assert
         Assert.True(secondPosition > firstPosition);
@@ -424,7 +427,8 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Assert - Two definition changes occurred, but only the second one had a registered user
         // First definition change: no memberships yet (0 commands)
@@ -470,14 +474,16 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction1,
             folder,
-            decider);
+            decider,
+            registry);
 
         var pos2 = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction2,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Assert - both should have processed their respective events
         var checkpoint1 = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
@@ -562,7 +568,8 @@ public class ReactionRunnerTests : IDisposable
             _projectionStore,
             reaction,
             folder,
-            decider);
+            decider,
+            registry);
 
         // Assert
         Assert.True(finalPosition > firstTriggerPosition);
@@ -616,6 +623,7 @@ public class ReactionRunnerTests : IDisposable
             reaction,
             folder,
             decider,
+            registry,
             logger: logger);
 
         // Assert - verify warning was logged
