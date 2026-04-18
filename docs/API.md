@@ -594,6 +594,7 @@ services.AddEventStore<OrderCreatedEvent, CustomerAggregate>(options =>
 {
     options.UseSqlServer(connectionString);
 });
+```
 
 #### AddEventStoreInMemory
 
@@ -653,6 +654,7 @@ services.AddEventStoreInMemory<OrderCreatedEvent>("TestDb");
 
 // Multiple assemblies using marker types
 services.AddEventStoreInMemory<OrderCreatedEvent, CustomerAggregate>("TestDb");
+```
 
 #### AddEventStoreSqlServer
 
@@ -724,6 +726,7 @@ services.AddEventStoreSqlServer<OrderCreatedEvent>(
 // Multiple assemblies using marker types
 services.AddEventStoreSqlServer<OrderCreatedEvent, CustomerAggregate>(
     connectionString);
+```
 
 ---
 
