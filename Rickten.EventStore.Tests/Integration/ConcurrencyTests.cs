@@ -305,6 +305,103 @@ public class ConcurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task SameScopeRetry_AfterOptimisticConcurrencyFailure_Succeeds()
+    {
+        // Regression test for GitHub issue #1:
+        // After a concurrency conflict, the same scoped EventStore should be able to
+        // reload the stream and successfully retry append without being poisoned by
+        // the failed entities from the first attempt.
+
+        var streamId = new StreamIdentifier("Account", "acc-same-scope-retry");
+
+        // Store 1 appends first event successfully
+        var store1 = CreateEventStore();
+        await store1.AppendAsync(
+            new StreamPointer(streamId, 0),
+            new List<AppendEvent> { new AppendEvent(new AccountDepositedEvent(100m), null) });
+
+        // Store 2 tries to append at stale version 0 - this should fail
+        var store2 = CreateEventStore();
+        var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
+        {
+            await store2.AppendAsync(
+                new StreamPointer(streamId, 0),
+                new List<AppendEvent> { new AppendEvent(new AccountDepositedEvent(200m), null) });
+        });
+
+        Assert.Equal(0, exception.ExpectedVersion.Version);
+        Assert.Equal(1, exception.ActualVersion.Version);
+
+        // Now retry with the SAME scoped store2 instance using the corrected version
+        // This should succeed - the failed append entities should not poison the context
+        var retryResult = await store2.AppendAsync(
+            new StreamPointer(streamId, exception.ActualVersion.Version),
+            new List<AppendEvent> { new AppendEvent(new AccountDepositedEvent(200m), null) });
+
+        Assert.Single(retryResult);
+        Assert.Equal(2, retryResult[0].StreamPointer.Version);
+
+        // Verify both events are now in the stream
+        var readStore = CreateEventStore();
+        var events = new List<StreamEvent>();
+        await foreach (var evt in readStore.LoadAsync(new StreamPointer(streamId, 0)))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Equal(2, events.Count);
+        Assert.Equal(1, events[0].StreamPointer.Version);
+        Assert.Equal(2, events[1].StreamPointer.Version);
+    }
+
+    [Fact]
+    public async Task SameScopeRetry_WithBatchAppend_AfterConflict_Succeeds()
+    {
+        // Test same-scope retry with multiple events in a batch
+        var streamId = new StreamIdentifier("Account", "acc-batch-retry");
+
+        // Store 1 appends first
+        var store1 = CreateEventStore();
+        await store1.AppendAsync(
+            new StreamPointer(streamId, 0),
+            new List<AppendEvent> { new AppendEvent(new AccountDepositedEvent(100m), null) });
+
+        // Store 2 tries to append batch at stale version - should fail
+        var store2 = CreateEventStore();
+        var batchEvents = new List<AppendEvent>
+        {
+            new AppendEvent(new AccountDepositedEvent(200m), null),
+            new AppendEvent(new AccountDepositedEvent(300m), null),
+            new AppendEvent(new AccountDepositedEvent(400m), null)
+        };
+
+        var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
+        {
+            await store2.AppendAsync(new StreamPointer(streamId, 0), batchEvents);
+        });
+
+        // Retry with same store2 using correct version
+        var retryResult = await store2.AppendAsync(
+            new StreamPointer(streamId, exception.ActualVersion.Version),
+            batchEvents);
+
+        Assert.Equal(3, retryResult.Count);
+        Assert.Equal(2, retryResult[0].StreamPointer.Version);
+        Assert.Equal(3, retryResult[1].StreamPointer.Version);
+        Assert.Equal(4, retryResult[2].StreamPointer.Version);
+
+        // Verify all 4 events are in the stream
+        var readStore = CreateEventStore();
+        var events = new List<StreamEvent>();
+        await foreach (var evt in readStore.LoadAsync(new StreamPointer(streamId, 0)))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Equal(4, events.Count);
+    }
+
+    [Fact]
     public async Task ConcurrentDifferentVersions_CorrectlyOrdered()
     {
         // Multiple clients appending at different (correct) versions should all succeed
