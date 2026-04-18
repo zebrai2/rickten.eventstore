@@ -421,10 +421,10 @@ var correlationId = metadata.GetGuid("CorrelationId");
 
 **Do not use direct casts** - they will fail after storage:
 ```csharp
-// ? This will fail after round-trip
+// Avoid: This will fail after round-trip through storage
 var timestamp = metadata.First(m => m.Key == "Timestamp").Value as DateTime?;
 
-// ? Use this instead
+// Recommended: Use the typed extension method instead
 var timestamp = metadata.GetDateTime("Timestamp");
 ```
 
