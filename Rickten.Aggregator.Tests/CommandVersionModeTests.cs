@@ -10,8 +10,6 @@ namespace Rickten.Aggregator.Tests;
 /// </summary>
 public class CommandVersionModeTests
 {
-    private readonly IStateRunner _stateRunner = new StateRunner();
-
     [Fact]
     public void CommandAttribute_DefaultExpectedVersionKey_IsNull()
     {
@@ -48,9 +46,10 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "latest-version-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Act: Execute command without ExpectedVersionKey (default behavior)
-            var result = await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            var result = await stateRunner.ExecuteAsync(folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Assert
             Assert.Single(result.Events);
@@ -71,13 +70,13 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "expected-version-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Create initial version 1
-            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+            await stateRunner.ExecuteAsync(folder, decider, streamId, new LatestVersionCommand(), registry);
 
             // Act: Execute with expected version in metadata
-            var result = await _stateRunner.ExecuteAsync(
-                eventStore,
+            var result = await stateRunner.ExecuteAsync(
                 folder,
                 decider,
                 streamId,

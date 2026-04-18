@@ -14,8 +14,6 @@ namespace Rickten.Aggregator.Tests;
 /// </summary>
 public class StateRunnerInvariantTests
 {
-    private readonly IStateRunner _stateRunner = new StateRunner();
-
     [Fact]
     public async Task LoadStateAsync_WithValidStream_SuccessfullyLoadsState()
     {
@@ -28,6 +26,7 @@ public class StateRunnerInvariantTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "valid-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Append multiple valid events
             var pointer = new StreamPointer(streamId, 0);
@@ -39,7 +38,7 @@ public class StateRunnerInvariantTests
             });
 
             // Act
-            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await stateRunner.LoadStateAsync(folder, streamId);
 
             // Assert
             Assert.Equal(3, state.Count);
@@ -57,11 +56,12 @@ public class StateRunnerInvariantTests
         {
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
-            var folder = new InvariantTestStateFolder(registry);
+            var folder = new InvariantTestStateFolder(registry);  
             var streamId = new StreamIdentifier("InvariantTest", "empty-stream");
+            var stateRunner = new StateRunner(eventStore);
 
             // Act: Load state from non-existent stream
-            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await stateRunner.LoadStateAsync(folder, streamId);
 
             // Assert
             Assert.Equal(0, state.Count);
@@ -82,6 +82,7 @@ public class StateRunnerInvariantTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "snapshot-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Create 5 events
             var pointer = new StreamPointer(streamId, 0);
@@ -106,7 +107,7 @@ public class StateRunnerInvariantTests
             });
 
             // Act: Load with snapshot - should start from version 3
-            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId, snapshotStore);
+            var (state, version) = await stateRunner.LoadStateAsync(folder, streamId, snapshotStore);
 
             // Assert: Should have folded events 4-7 onto snapshot
             Assert.Equal(7, state.Count);
@@ -129,6 +130,7 @@ public class StateRunnerInvariantTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "continuity-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Append events normally (EventStore ensures continuity)
             var pointer = new StreamPointer(streamId, 0);
@@ -145,7 +147,7 @@ public class StateRunnerInvariantTests
             Assert.Equal(3, result[2].StreamPointer.Version);
 
             // StateRunner should successfully load
-            var (state, version) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state, version) = await stateRunner.LoadStateAsync(folder, streamId);
             Assert.Equal(3, state.Count);
             Assert.Equal(3, version);
         }
@@ -236,16 +238,17 @@ public class StateRunnerInvariantTests
             var folder = new InvariantTestStateFolder(registry);
             var decider = new InvariantTestDecider();
             var streamId = new StreamIdentifier("InvariantTest", "concurrency-test");
+            var stateRunner = new StateRunner(eventStore);
 
             // Create initial state
-            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
+            await stateRunner.ExecuteAsync(folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Load state (version 1)
-            var (state1, version1) = await _stateRunner.LoadStateAsync(eventStore, folder, streamId);
+            var (state1, version1) = await stateRunner.LoadStateAsync(folder, streamId);
             Assert.Equal(1, version1);
 
             // Execute another command to advance to version 2
-            await _stateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new InvariantTestCommand(), registry);
+            await stateRunner.ExecuteAsync(folder, decider, streamId, new InvariantTestCommand(), registry);
 
             // Try to execute using stale version 1 - should fail
             var stalePointer = new StreamPointer(streamId, version1);

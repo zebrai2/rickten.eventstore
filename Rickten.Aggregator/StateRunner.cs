@@ -7,12 +7,22 @@ namespace Rickten.Aggregator;
 /// </summary>
 public class StateRunner : IStateRunner
 {
+    private readonly IEventStore _eventStore;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StateRunner"/> class.
+    /// </summary>
+    /// <param name="eventStore">The event store.</param>
+    public StateRunner(IEventStore eventStore)
+    {
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+    }
+
     /// <summary>
     /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
     /// If a snapshot store is provided, starts from the latest snapshot to optimize loading.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
-    /// <param name="eventStore">The event store.</param>
     /// <param name="folder">The state folder.</param>
     /// <param name="streamIdentifier">The stream to load.</param>
     /// <param name="snapshotStore">Optional snapshot store to load from a snapshot.</param>
@@ -20,7 +30,6 @@ public class StateRunner : IStateRunner
     /// <returns>The current state and version.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
     public async Task<(TState State, long Version)> LoadStateAsync<TState>(
-        IEventStore eventStore,
         IStateFolder<TState> folder,
         StreamIdentifier streamIdentifier,
         ISnapshotStore? snapshotStore = null,
@@ -52,7 +61,7 @@ public class StateRunner : IStateRunner
 
         var pointer = new StreamPointer(streamIdentifier, version);
 
-        await foreach (var streamEvent in eventStore.LoadAsync(pointer, cancellationToken))
+        await foreach (var streamEvent in _eventStore.LoadAsync(pointer, cancellationToken))
         {
             // Validate stream identifier matches
             if (streamEvent.StreamPointer.Stream != streamIdentifier)
@@ -104,7 +113,6 @@ public class StateRunner : IStateRunner
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <typeparam name="TCommand">The command type.</typeparam>
-    /// <param name="eventStore">The event store.</param>
     /// <param name="folder">The state folder.</param>
     /// <param name="decider">The command decider.</param>
     /// <param name="streamIdentifier">The stream identifier.</param>
@@ -115,7 +123,6 @@ public class StateRunner : IStateRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, version, and appended events.</returns>
     public async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(
-        IEventStore eventStore,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
         StreamIdentifier streamIdentifier,
@@ -129,7 +136,6 @@ public class StateRunner : IStateRunner
         var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata, registry);
 
         return await ExecuteCoreAsync(
-            eventStore,
             folder,
             decider,
             streamIdentifier,
@@ -216,7 +222,6 @@ public class StateRunner : IStateRunner
 
 
     private async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteCoreAsync<TState, TCommand>(
-        IEventStore eventStore,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
         StreamIdentifier streamIdentifier,
@@ -228,7 +233,7 @@ public class StateRunner : IStateRunner
         CancellationToken cancellationToken)
     {
         // Load current state (with snapshot optimization if available)
-        var (state, currentVersion) = await LoadStateAsync(eventStore, folder, streamIdentifier, snapshotStore, cancellationToken);
+        var (state, currentVersion) = await LoadStateAsync(folder, streamIdentifier, snapshotStore, cancellationToken);
 
         // If expected version is specified, validate it matches current version before deciding
         if (expectedVersion.HasValue && currentVersion != expectedVersion.Value)
@@ -263,7 +268,7 @@ public class StateRunner : IStateRunner
         var appendVersion = expectedVersion ?? currentVersion;
         var pointer = new StreamPointer(streamIdentifier, appendVersion);
         var appendEvents = events.Select(e => new AppendEvent(e, filteredMetadata)).ToList();
-        var appendedEvents = await eventStore.AppendAsync(pointer, appendEvents, cancellationToken);
+        var appendedEvents = await _eventStore.AppendAsync(pointer, appendEvents, cancellationToken);
 
         // Fold events into state
         var newState = state;

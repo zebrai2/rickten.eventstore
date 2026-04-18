@@ -12,7 +12,6 @@ public interface IStateRunner
     /// If a snapshot store is provided, starts from the latest snapshot to optimize loading.
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
-    /// <param name="eventStore">The event store.</param>
     /// <param name="folder">The state folder.</param>
     /// <param name="streamIdentifier">The stream to load.</param>
     /// <param name="snapshotStore">Optional snapshot store to load from a snapshot.</param>
@@ -20,7 +19,6 @@ public interface IStateRunner
     /// <returns>The current state and version.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
     Task<(TState State, long Version)> LoadStateAsync<TState>(
-        IEventStore eventStore,
         IStateFolder<TState> folder,
         StreamIdentifier streamIdentifier,
         ISnapshotStore? snapshotStore = null,
@@ -33,7 +31,6 @@ public interface IStateRunner
     /// </summary>
     /// <typeparam name="TState">The aggregate state type.</typeparam>
     /// <typeparam name="TCommand">The command type.</typeparam>
-    /// <param name="eventStore">The event store.</param>
     /// <param name="folder">The state folder.</param>
     /// <param name="decider">The command decider.</param>
     /// <param name="streamIdentifier">The stream identifier.</param>
@@ -44,7 +41,6 @@ public interface IStateRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, version, and appended events.</returns>
     Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(
-        IEventStore eventStore,
         IStateFolder<TState> folder,
         ICommandDecider<TState, TCommand> decider,
         StreamIdentifier streamIdentifier,

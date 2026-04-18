@@ -217,14 +217,13 @@ public static class ReactionRunner
                 foreach (var (targetStream, command) in commands)
                 {
                     await stateRunner.ExecuteAsync(
-                        eventStore,
                         folder,
                         decider,
                         targetStream,
                         command,
                         registry,
                         snapshotStore,
-                        metadata: reactionMetadata,
+                        reactionMetadata,
                         cancellationToken);
                 }
 

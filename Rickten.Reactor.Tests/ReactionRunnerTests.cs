@@ -240,7 +240,6 @@ public class ReactionRunnerTests : IDisposable
     private readonly Microsoft.Data.Sqlite.SqliteConnection _connection;
     private readonly IServiceProvider _serviceProvider;
     private readonly InMemoryProjectionStore _projectionStore;
-    private readonly IStateRunner _stateRunner = new StateRunner();
 
     public ReactionRunnerTests()
     {
@@ -290,6 +289,7 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act
+        var stateRunner = new StateRunner(eventStore);
         var lastPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -297,7 +297,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Assert
         Assert.True(lastPosition > 0);
@@ -356,6 +356,7 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // First catch-up
+        var stateRunner = new StateRunner(eventStore);
         var firstPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -363,7 +364,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Add another definition change
         await eventStore.AppendAsync(new StreamPointer(defStream, 2), new List<AppendEvent>
@@ -379,7 +380,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Assert
         Assert.True(secondPosition > firstPosition);
@@ -426,6 +427,7 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act - MembershipDefinitionChangedReaction only triggers on MembershipDefinition.Changed events
+        var stateRunner = new StateRunner(eventStore);
         var lastPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -433,7 +435,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Assert - Two definition changes occurred, but only the second one had a registered user
         // First definition change: no memberships yet (0 commands)
@@ -474,6 +476,7 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act - run both reactions
+        var stateRunner = new StateRunner(eventStore);
         var pos1 = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -481,7 +484,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         var pos2 = await ReactionRunner.CatchUpAsync(
             eventStore,
@@ -490,7 +493,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Assert - both should have processed their respective events
         var checkpoint1 = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
@@ -570,6 +573,7 @@ public class ReactionRunnerTests : IDisposable
         await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:projection", allEventsPosition, fullView, "reaction");
 
         // Act - catch up should rebuild projection to reaction position (1), then process triggers 2-3
+        var stateRunner = new StateRunner(eventStore);
         var finalPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -577,7 +581,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner);
+            stateRunner);
 
         // Assert
         Assert.True(finalPosition > firstTriggerPosition);
@@ -625,6 +629,7 @@ public class ReactionRunnerTests : IDisposable
             new MembershipDefinitionView(new Dictionary<string, List<string>>()), "reaction");
 
         // Act
+        var stateRunner = new StateRunner(eventStore);
         await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
@@ -632,7 +637,7 @@ public class ReactionRunnerTests : IDisposable
             folder,
             decider,
             registry,
-            _stateRunner,
+            stateRunner,
             logger: logger);
 
         // Assert - verify warning was logged
