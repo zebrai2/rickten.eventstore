@@ -18,7 +18,7 @@ dotnet add package Rickten.EventStore
 ```
 
 ### **Rickten.EventStore.EntityFramework**
-Entity Framework Core implementation of the event store with support for SQL Server, PostgreSQL, SQLite, and in-memory databases.
+Entity Framework Core implementation of the event store. **Includes SQL Server and InMemory providers.** Supports other EF Core providers (PostgreSQL, SQLite, etc.) through generic `DbContextOptions` configuration when you install the provider package separately.
 
 ```bash
 dotnet add package Rickten.EventStore.EntityFramework
@@ -65,7 +65,7 @@ dotnet add package Rickten.Projector
 - ✅ **Snapshots** - Optimize aggregate rebuilding with state snapshots
 - ✅ **Projections** - Build read models from event streams
 - ✅ **Dependency Injection** - First-class DI support with flexible configuration
-- ✅ **Multiple Storage Options** - SQL Server, PostgreSQL, SQLite, In-Memory
+- ✅ **Multiple Storage Options** - SQL Server and InMemory included; PostgreSQL, SQLite, and other EF Core providers supported via generic configuration
 - ✅ **Async/Await** - Modern async patterns with `IAsyncEnumerable`
 - ✅ **Strong Typing** - Type-safe event handling with records
 - ✅ **Metadata Support** - Attach metadata to events (correlation IDs, causation IDs, etc.)
@@ -80,10 +80,11 @@ dotnet add package Rickten.EventStore.EntityFramework
 # Optional: Add aggregator support
 dotnet add package Rickten.Aggregator
 
-# Optional: Add database-specific providers
-dotnet add package Microsoft.EntityFrameworkCore.SqlServer
-dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
-dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+# For database providers:
+# - SQL Server and InMemory providers are included in Rickten.EventStore.EntityFramework
+# - For other databases, install the provider package separately:
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL  # For PostgreSQL
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite   # For SQLite
 ```
 
 ### ⚠️ Type Registration Requirement
@@ -915,7 +916,15 @@ public class OrderQueryHandler
 
 ## 🗄️ Database Configuration
 
+### Included Providers
+
+**Rickten.EventStore.EntityFramework includes:**
+- **SQL Server** - First-class support with `AddEventStoreSqlServer()` helper methods
+- **InMemory** - First-class support with `AddEventStoreInMemory()` helper methods for testing
+
 ### SQL Server
+
+SQL Server is bundled with first-class helper methods:
 
 ```csharp
 services.AddEventStoreSqlServer(
@@ -929,11 +938,27 @@ services.AddEventStoreSqlServer(
     });
 ```
 
-### PostgreSQL
+### InMemory (Testing)
+
+InMemory provider is bundled with first-class helper methods:
+
+```csharp
+services.AddEventStoreInMemory("TestDb", typeof(MyEvent).Assembly);
+```
+
+### Other EF Core Providers
+
+**PostgreSQL, SQLite, and other EF Core providers** are supported through the generic `AddEventStore()` method, but you must install the provider package separately. Rickten does not bundle these providers or provide dedicated helper methods like `AddEventStorePostgres()`.
+
+#### PostgreSQL
+
+**Step 1:** Install the Npgsql provider package in your application:
 
 ```bash
 dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 ```
+
+**Step 2:** Use the generic `AddEventStore()` method:
 
 ```csharp
 // Must provide assemblies
@@ -959,11 +984,15 @@ services.AddEventStore<MyEvent>(options =>
 });
 ```
 
-### SQLite
+#### SQLite
+
+**Step 1:** Install the SQLite provider package in your application:
 
 ```bash
 dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 ```
+
+**Step 2:** Use the generic `AddEventStore()` method:
 
 ```csharp
 // Must provide assemblies
@@ -976,6 +1005,24 @@ services.AddEventStore(options =>
 services.AddEventStore<MyEvent>(options =>
 {
     options.UseSqlite("Data Source=eventstore.db");
+});
+```
+
+#### Other Providers
+
+Any EF Core provider that supports relational databases can be used:
+
+```csharp
+// Example: MySQL (requires Pomelo.EntityFrameworkCore.MySql package)
+services.AddEventStore<MyEvent>(options =>
+{
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+});
+
+// Example: Oracle (requires Oracle.EntityFrameworkCore package)
+services.AddEventStore<MyEvent>(options =>
+{
+    options.UseOracle(connectionString);
 });
 ```
 

@@ -14,13 +14,13 @@
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.EventStore.EntityFramework</Product>
-    <Description>Entity Framework Core implementation for Rickten.EventStore. Provides storage for events, snapshots, and projections using SQL Server, PostgreSQL, SQLite, and other EF Core providers. Includes dependency injection extensions for easy setup.</Description>
+    <Description>Entity Framework Core implementation for Rickten.EventStore. Provides storage for events, snapshots, and projections with included SQL Server and InMemory providers. Supports other EF Core providers (PostgreSQL, SQLite, etc.) through generic DbContextOptions configuration when you install the provider package separately. Includes dependency injection extensions for easy setup.</Description>
     <Copyright>Copyright (c) 2025 Rickten</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/zebrai2/rickten.eventstore</PackageProjectUrl>
     <RepositoryUrl>https://github.com/zebrai2/rickten.eventstore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;postgresql;dotnet;csharp</PackageTags>
+    <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon-128.png</PackageIcon>
     <PackageReleaseNotes>Initial release with Entity Framework Core support for event sourcing, snapshots, and projections. Includes dependency injection extensions.</PackageReleaseNotes>

@@ -2,6 +2,18 @@
 
 Complete API documentation for Rickten.EventStore.
 
+## EF Core Provider Support
+
+**Rickten.EventStore.EntityFramework includes:**
+- **SQL Server** - Bundled with first-class `AddEventStoreSqlServer()` helper methods
+- **InMemory** - Bundled with first-class `AddEventStoreInMemory()` helper methods for testing
+
+**Other EF Core providers** (PostgreSQL, SQLite, MySQL, Oracle, etc.) are supported through the generic `AddEventStore(options => ...)` method. To use these providers:
+1. Install the provider package in your application (e.g., `Npgsql.EntityFrameworkCore.PostgreSQL` or `Microsoft.EntityFrameworkCore.Sqlite`)
+2. Configure using `AddEventStore()` with the provider's `Use*()` method (see [AddEventStore](#addeventstore) examples)
+
+Rickten does not bundle these providers or provide dedicated helper methods like `AddEventStorePostgres()` or `AddEventStoreSqlite()`.
+
 ## Table of Contents
 
 - [Core Abstractions](#core-abstractions)
@@ -575,10 +587,26 @@ public static IServiceCollection AddEventStore(
 
 **Example:**
 ```csharp
+// SQL Server (bundled provider)
 services.AddEventStore(options =>
 {
     options.UseSqlServer(connectionString);
 }, typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly);
+
+// PostgreSQL (requires Npgsql.EntityFrameworkCore.PostgreSQL package)
+services.AddEventStore(options =>
+{
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(5);
+    });
+}, typeof(MyEvent).Assembly);
+
+// SQLite (requires Microsoft.EntityFrameworkCore.Sqlite package)
+services.AddEventStore(options =>
+{
+    options.UseSqlite("Data Source=eventstore.db");
+}, typeof(MyEvent).Assembly);
 ```
 
 **Marker-Type Overloads:**
@@ -612,6 +640,21 @@ services.AddEventStore<OrderCreatedEvent>(options =>
     options.UseSqlServer(connectionString);
 });
 
+// PostgreSQL example (requires Npgsql.EntityFrameworkCore.PostgreSQL package)
+services.AddEventStore<OrderCreatedEvent>(options =>
+{
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(5);
+    });
+});
+
+// SQLite example (requires Microsoft.EntityFrameworkCore.Sqlite package)
+services.AddEventStore<OrderCreatedEvent>(options =>
+{
+    options.UseSqlite("Data Source=eventstore.db");
+});
+
 // Multiple assemblies using marker types
 services.AddEventStore<OrderCreatedEvent, CustomerAggregate>(options =>
 {
@@ -621,7 +664,7 @@ services.AddEventStore<OrderCreatedEvent, CustomerAggregate>(options =>
 
 #### AddEventStoreInMemory
 
-Registers all stores with in-memory database (for testing).
+Registers all stores with in-memory database using the bundled provider (for testing).
 
 **Primary Overload (Assembly Array):**
 ```csharp
@@ -681,7 +724,7 @@ services.AddEventStoreInMemory<OrderCreatedEvent, CustomerAggregate>("TestDb");
 
 #### AddEventStoreSqlServer
 
-Registers all stores with SQL Server.
+Registers all stores with SQL Server using the bundled provider.
 
 **Primary Overload (Assembly Array):**
 ```csharp
