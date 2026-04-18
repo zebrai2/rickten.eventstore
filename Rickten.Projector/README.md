@@ -36,7 +36,7 @@ public record ActiveSessionsView
 ```csharp
 [Projection("ActiveSessions",
     AggregateTypes = ["SessionReview"],
-    EventTypes = ["SessionStarted", "SessionCompleted", "SessionCancelled"])]
+    EventTypes = ["SessionReview.SessionStarted.v1", "SessionReview.SessionCompleted.v1", "SessionReview.SessionCancelled.v1"])]
 public class ActiveSessionsProjection : Projection<ActiveSessionsView>
 {
     public override ActiveSessionsView InitialView() => new();
@@ -141,18 +141,19 @@ Optional attribute for metadata and filtering:
 ```csharp
 [Projection("ProjectionName",
     AggregateTypes = ["Aggregate1", "Aggregate2"],
-    EventTypes = ["Event1", "Event2"],
+    EventTypes = ["Aggregate1.Event1.v1", "Aggregate2.Event2.v1"],
     Description = "What this projection does")]
 ```
 
 **Properties:**
 - `Name` (required) - Projection identifier for checkpointing
 - `AggregateTypes` (optional) - Filter by aggregate types (uses `IEventStore.LoadAllAsync`)
-- `EventTypes` (optional) - Filter by event types (uses `IEventStore.LoadAllAsync`)
+- `EventTypes` (optional) - Filter by event types using **wire-name format**: `{Aggregate}.{Name}.v{Version}` (uses `IEventStore.LoadAllAsync`)
 - `Description` (optional) - Documentation
 
 **Filter Behavior:**
 - Filters are passed to `IEventStore.LoadAllAsync` for efficient querying
+- `EventTypes` must match stored wire names from `[Event]` attributes, not short event names
 - Runtime validation ensures received events match filters
 - Throws `InvalidOperationException` if mismatch detected
 - `null` filters mean "all events"
@@ -266,11 +267,13 @@ public class UserStatsProjection : Projection<UserStatsView>
 ### Event-Specific Projection
 
 ```csharp
+// EventTypes must use wire-name format: {Aggregate}.{Name}.v{Version}
 [Projection("CompletedSessions",
-    EventTypes = ["SessionCompleted"])]
+    EventTypes = ["SessionReview.SessionCompleted.v1"])]
 public class CompletedSessionsProjection : Projection<CompletedView>
 {
-    // Only processes SessionCompleted events
+    // Only processes SessionCompleted events from SessionReview aggregate
+    // Wire name matches [Event("SessionReview", "SessionCompleted", 1)]
 }
 ```
 

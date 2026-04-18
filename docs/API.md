@@ -87,8 +87,8 @@ Loads all events across all streams starting **after** a global position.
 
 **Parameters:**
 - `fromGlobalPosition` (long): The global position to start loading after (exclusive). Defaults to 0 (beginning)
-- `streamTypeFilter` (string[]?): Optional filter to include only specific stream types
-- `eventsFilter` (string[]?): Optional filter to include only specific event types
+- `streamTypeFilter` (string[]?): Optional filter to include only specific stream types (aggregate types)
+- `eventsFilter` (string[]?): Optional filter to include only specific event types using **wire-name format**: `{Aggregate}.{Name}.v{Version}`. Wire names must match the `[Event]` attribute values, not short event names.
 - `cancellationToken` (CancellationToken): Optional cancellation token
 
 **Returns:** `IAsyncEnumerable<StreamEvent>` - Stream of events from all matching streams
@@ -101,6 +101,15 @@ await foreach (var streamEvent in eventStore.LoadAllAsync(
     streamTypeFilter: new[] { "Order" }))
 {
     // Process event
+}
+
+// Filter by specific event types using wire names
+// For [Event("Order", "Created", 1)] use "Order.Created.v1"
+await foreach (var streamEvent in eventStore.LoadAllAsync(
+    fromGlobalPosition: 0,
+    eventsFilter: new[] { "Order.Created.v1", "Order.Paid.v1" }))
+{
+    // Process only OrderCreatedEvent and OrderPaidEvent
 }
 
 // Resume from a checkpoint at position N (loads events with position > N)
@@ -457,10 +466,24 @@ public sealed class EventAttribute(
 - `Name` (string): Gets the event name
 - `Version` (int): Gets the schema version
 
+**Wire Name Format:** The event store generates a wire name for each event type using the format: `{Aggregate}.{Name}.v{Version}`. This wire name is used for event type filtering in `IEventStore.LoadAllAsync` and projection filters. For example, `[Event("Order", "Created", 1)]` produces the wire name `"Order.Created.v1"`.
+
 **Example:**
 ```csharp
 [Event("Order", "Created", 1)]
 public record OrderCreatedEvent(string OrderId, decimal Amount);
+// Wire name: "Order.Created.v1"
+
+[Event("Order", "Paid", 1)]
+public record OrderPaidEvent(string PaymentId, decimal Amount);
+// Wire name: "Order.Paid.v1"
+
+// Use wire names when filtering:
+await foreach (var evt in eventStore.LoadAllAsync(
+    eventsFilter: new[] { "Order.Created.v1", "Order.Paid.v1" }))
+{
+    // Process only OrderCreatedEvent and OrderPaidEvent
+}
 ```
 
 ---
