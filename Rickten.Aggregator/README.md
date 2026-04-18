@@ -44,7 +44,7 @@ public interface ICommandDecider<TState, TCommand>
 - Validates produced events match the aggregate
 - Separates validation from event production
 - Provides helper methods: `Event()`, `NoEvents()`, `Events()`, `Require()`, `RequireEqual()`, `RequireNotNull()`
-- Provides `CreateStreamId(identifier)` helper for stream identifier creation
+- Provides **protected** `CreateStreamId(identifier)` helper for stream identifier creation within decider implementations
 - Clean `ValidateCommand()` and `ExecuteCommand()` methods to override
 
 ### StateRunner
@@ -232,6 +232,9 @@ public abstract record SessionReviewCommand
 
     [Command("SessionReview")]
     public sealed record ProvideFeedback(int Rating, string? Comment) : SessionReviewCommand;
+
+    [Command("SessionReview")]
+    public sealed record CompleteSession : SessionReviewCommand;
 }
 ```
 
@@ -245,19 +248,36 @@ public abstract record SessionReviewEvent
 
     [Event("SessionReview", "InteractionRecorded", 1)]
     public sealed record InteractionRecorded(string InteractionId, string Type, string Content, DateTime RecordedAt) : SessionReviewEvent;
+
+    [Event("SessionReview", "FeedbackProvided", 1)]
+    public sealed record FeedbackProvided(int Rating, string? Comment, DateTime ProvidedAt) : SessionReviewEvent;
+
+    [Event("SessionReview", "SessionCompleted", 1)]
+    public sealed record SessionCompleted(DateTime CompletedAt) : SessionReviewEvent;
 }
 ```
 
 ### 3. Define Your State
 
 ```csharp
-[Aggregate("SessionReview")]
+public enum SessionStatus
+{
+    NotStarted,
+    Active,
+    Completed
+}
+
+[Aggregate("SessionReview", SnapshotInterval = 50)]
 public sealed record SessionReviewState
 {
     public string SessionId { get; init; } = string.Empty;
     public string UserId { get; init; } = string.Empty;
+    public SessionStatus Status { get; init; } = SessionStatus.NotStarted;
     public DateTime? StartedAt { get; init; }
+    public DateTime? CompletedAt { get; init; }
     public ImmutableList<SessionReviewEvent.InteractionRecorded> Interactions { get; init; } = ImmutableList<SessionReviewEvent.InteractionRecorded>.Empty;
+    public int? Rating { get; init; }
+    public string? FeedbackComment { get; init; }
 }
 ```
 
@@ -269,23 +289,42 @@ using Rickten.Aggregator;
 
 public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 {
-    // Inject the type metadata registry
+    // Inject the type metadata registry - required by StateFolder<TState>
     public SessionReviewStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
 
     public override SessionReviewState InitialState() => new();
 
-    protected SessionReviewState When(SessionStarted e, SessionReviewState state) =>
-        state with { SessionId = e.SessionId, UserId = e.UserId, StartedAt = e.StartedAt };
+    protected SessionReviewState When(SessionReviewEvent.SessionStarted e, SessionReviewState state) =>
+        state with 
+        { 
+            SessionId = e.SessionId, 
+            UserId = e.UserId, 
+            StartedAt = e.StartedAt,
+            Status = SessionStatus.Active
+        };
 
-    protected SessionReviewState When(InteractionRecorded e, SessionReviewState state) =>
+    protected SessionReviewState When(SessionReviewEvent.InteractionRecorded e, SessionReviewState state) =>
         state with { Interactions = state.Interactions.Add(e) };
+
+    protected SessionReviewState When(SessionReviewEvent.FeedbackProvided e, SessionReviewState state) =>
+        state with 
+        { 
+            Rating = e.Rating, 
+            FeedbackComment = e.Comment 
+        };
+
+    protected SessionReviewState When(SessionReviewEvent.SessionCompleted e, SessionReviewState state) =>
+        state with 
+        { 
+            Status = SessionStatus.Completed,
+            CompletedAt = e.CompletedAt
+        };
 }
 ```
 
 ### 5. Implement Command Decider (Using Base Class with Helpers)
 
 ```csharp
-[Aggregate("SessionReview")]
 public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewState, SessionReviewCommand>
 {
     // Validation happens BEFORE execution - keeps decision logic clean
@@ -324,6 +363,8 @@ public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewSt
                     feedback.Rating, 
                     feedback.Comment, 
                     DateTime.UtcNow)),
+            SessionReviewCommand.CompleteSession => Event(
+                new SessionReviewEvent.SessionCompleted(DateTime.UtcNow)),
             _ => throw new InvalidOperationException("Unknown command type")
         };
     }
@@ -350,10 +391,10 @@ var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>(); 
 var folder = new SessionReviewStateFolder(registry);
 var decider = new SessionReviewCommandDecider();
 
-// Use the helper to create stream identifier
-var streamId = decider.CreateStreamId("session-1");
+// Create stream identifier directly - CreateStreamId is a protected helper
+var streamId = new StreamIdentifier("SessionReview", "session-1");
 
-// Execute a command (with automatic snapshots if configured)
+// Execute a command (with automatic snapshots if configured on state type)
 var command = new SessionReviewCommand.StartSession("session-1", "user-123");
 var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
     eventStore,
@@ -370,13 +411,20 @@ Console.WriteLine($"Events appended: {events.Count}");
 
 ### 7. Automatic Snapshots
 
-Configure snapshots declaratively with the `[Aggregate]` attribute:
+Configure snapshots declaratively on the state type with the `[Aggregate]` attribute:
 
 ```csharp
+// SnapshotInterval is configured on the STATE TYPE, not the folder
 [Aggregate("SessionReview", SnapshotInterval = 50)]
+public sealed record SessionReviewState
+{
+    // ... state properties ...
+}
+
 public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 {
-    // ...
+    public SessionReviewStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
+    // ... event handlers ...
 }
 
 // In your code
@@ -384,6 +432,9 @@ using var scope = serviceProvider.CreateScope();
 var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
 var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
 var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+var folder = new SessionReviewStateFolder(registry);
+var decider = new SessionReviewCommandDecider();
+var streamId = new StreamIdentifier("SessionReview", "session-1");
 
 var (state, version, events) = await StateRunner.ExecuteAsync(
     eventStore,
@@ -446,8 +497,8 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 - `RequireNotNull<T>(T? value, string message)` - Throws if value is null
 
 **Utilities:**
-- `CreateStreamId(string identifier)` - Creates StreamIdentifier with aggregate name
-- `AggregateName` property - Gets the aggregate name from `[Aggregate]` attribute
+- `CreateStreamId(string identifier)` - **Protected** helper to create StreamIdentifier with aggregate name (for use within decider subclasses; consumers should use `new StreamIdentifier(aggregateName, id)` directly)
+- `AggregateName` property - **Protected** property that gets the aggregate name from `[Aggregate]` attribute
 
 ### StateFolder<TState> Helpers
 
