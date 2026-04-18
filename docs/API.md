@@ -534,31 +534,196 @@ Extension methods for configuring Event Store services.
 
 Registers all stores (IEventStore, ISnapshotStore, IProjectionStore) with shared DbContext.
 
+**Primary Overload (Assembly Array):**
 ```csharp
 public static IServiceCollection AddEventStore(
+    this IServiceCollection services,
+    Action<DbContextOptionsBuilder> optionsAction,
+    params Assembly[] assemblies)
+```
+
+**Parameters:**
+- `services` (IServiceCollection): The service collection to add services to
+- `optionsAction` (Action<DbContextOptionsBuilder>): An action to configure the DbContext
+- `assemblies` (params Assembly[]): The assemblies containing events, aggregates, projections, commands, and reactions. **Required** - at least one assembly must be provided.
+
+**Throws:**
+- `ArgumentException`: When no assemblies are provided
+
+**Example:**
+```csharp
+services.AddEventStore(options =>
+{
+    options.UseSqlServer(connectionString);
+}, typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly);
+```
+
+**Marker-Type Overloads:**
+
+Use a type from the assembly to scan:
+```csharp
+public static IServiceCollection AddEventStore<TMarker>(
     this IServiceCollection services,
     Action<DbContextOptionsBuilder> optionsAction)
 ```
 
+Use two types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStore<TMarker1, TMarker2>(
+    this IServiceCollection services,
+    Action<DbContextOptionsBuilder> optionsAction)
+```
+
+Use three types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStore<TMarker1, TMarker2, TMarker3>(
+    this IServiceCollection services,
+    Action<DbContextOptionsBuilder> optionsAction)
+```
+
+**Example:**
+```csharp
+// Single assembly using marker type
+services.AddEventStore<OrderCreatedEvent>(options =>
+{
+    options.UseSqlServer(connectionString);
+});
+
+// Multiple assemblies using marker types
+services.AddEventStore<OrderCreatedEvent, CustomerAggregate>(options =>
+{
+    options.UseSqlServer(connectionString);
+});
+
 #### AddEventStoreInMemory
 
-Registers all stores with in-memory database (testing).
+Registers all stores with in-memory database (for testing).
 
+**Primary Overload (Assembly Array):**
 ```csharp
 public static IServiceCollection AddEventStoreInMemory(
     this IServiceCollection services,
+    string databaseName,
+    params Assembly[] assemblies)
+```
+
+**Parameters:**
+- `services` (IServiceCollection): The service collection to add services to
+- `databaseName` (string): The name of the in-memory database
+- `assemblies` (params Assembly[]): The assemblies containing events, aggregates, projections, commands, and reactions. **Required** - at least one assembly must be provided.
+
+**Throws:**
+- `ArgumentException`: When no assemblies are provided
+
+**Example:**
+```csharp
+services.AddEventStoreInMemory(
+    "TestDb",
+    typeof(MyEvent).Assembly,
+    typeof(MyAggregate).Assembly);
+```
+
+**Marker-Type Overloads:**
+
+Use a type from the assembly to scan:
+```csharp
+public static IServiceCollection AddEventStoreInMemory<TMarker>(
+    this IServiceCollection services,
     string databaseName)
 ```
+
+Use two types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStoreInMemory<TMarker1, TMarker2>(
+    this IServiceCollection services,
+    string databaseName)
+```
+
+Use three types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStoreInMemory<TMarker1, TMarker2, TMarker3>(
+    this IServiceCollection services,
+    string databaseName)
+```
+
+**Example:**
+```csharp
+// Single assembly using marker type
+services.AddEventStoreInMemory<OrderCreatedEvent>("TestDb");
+
+// Multiple assemblies using marker types
+services.AddEventStoreInMemory<OrderCreatedEvent, CustomerAggregate>("TestDb");
 
 #### AddEventStoreSqlServer
 
 Registers all stores with SQL Server.
 
+**Primary Overload (Assembly Array):**
 ```csharp
 public static IServiceCollection AddEventStoreSqlServer(
     this IServiceCollection services,
-    string connectionString)
+    string connectionString,
+    Assembly[] assemblies,
+    Action<SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
 ```
+
+**Parameters:**
+- `services` (IServiceCollection): The service collection to add services to
+- `connectionString` (string): The SQL Server connection string
+- `assemblies` (Assembly[]): The assemblies containing events, aggregates, projections, commands, and reactions. **Required** - at least one assembly must be provided.
+- `sqlServerOptionsAction` (Action<SqlServerDbContextOptionsBuilder>?): Optional SQL Server specific configuration (e.g., retry policies)
+
+**Throws:**
+- `ArgumentException`: When no assemblies are provided
+
+**Example:**
+```csharp
+services.AddEventStoreSqlServer(
+    connectionString,
+    new[] { typeof(MyEvent).Assembly, typeof(MyAggregate).Assembly },
+    sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(5);
+        sqlOptions.CommandTimeout(60);
+    });
+```
+
+**Marker-Type Overloads:**
+
+Use a type from the assembly to scan:
+```csharp
+public static IServiceCollection AddEventStoreSqlServer<TMarker>(
+    this IServiceCollection services,
+    string connectionString,
+    Action<SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+```
+
+Use two types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStoreSqlServer<TMarker1, TMarker2>(
+    this IServiceCollection services,
+    string connectionString,
+    Action<SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+```
+
+Use three types from different assemblies:
+```csharp
+public static IServiceCollection AddEventStoreSqlServer<TMarker1, TMarker2, TMarker3>(
+    this IServiceCollection services,
+    string connectionString,
+    Action<SqlServerDbContextOptionsBuilder>? sqlServerOptionsAction = null)
+```
+
+**Example:**
+```csharp
+// Single assembly using marker type
+services.AddEventStoreSqlServer<OrderCreatedEvent>(
+    connectionString,
+    sqlOptions => sqlOptions.EnableRetryOnFailure(5));
+
+// Multiple assemblies using marker types
+services.AddEventStoreSqlServer<OrderCreatedEvent, CustomerAggregate>(
+    connectionString);
 
 ---
 
