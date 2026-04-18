@@ -60,12 +60,15 @@ public class MembershipReaction : Reaction<MembershipView, RecalculateCommand>
 }
 
 // Execute
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
+
 await ReactionRunner.CatchUpAsync(
     eventStore,
     projectionStore,
     reaction,
     folder,
-    decider);
+    decider,
+    registry);
 ```
 
 ### 🔐 Metadata-Based Expected Version Support
@@ -79,13 +82,15 @@ await ReactionRunner.CatchUpAsync(
 **Benefits**:
 - Commands remain simple and focused on business intent
 - Expected version is consumed by StateRunner, not persisted with events
-- Same command type can be used with or without expected version
+- Expected version is supplied through metadata, not the command payload
 - Clear separation between command data and execution context
 
 **Example**:
 ```csharp
 [Command("Order", ExpectedVersionKey = "ExpectedVersion")]
 public sealed record ApproveOrder(string OrderId);
+
+var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
 
 // User observed version 5 from read model
 var order = await readModel.GetOrder("order-1"); // returns version 5
@@ -97,6 +102,7 @@ await StateRunner.ExecuteAsync(
     decider,
     streamId,
     new ApproveOrder("order-1"),
+    registry,
     metadata: [
         new AppendMetadata("ExpectedVersion", order.Version),
         new AppendMetadata("CorrelationId", correlationId)
@@ -107,7 +113,6 @@ await StateRunner.ExecuteAsync(
 - ⚠️ `CommandVersionMode` enum removed
 - ⚠️ `IExpectedVersionCommand` interface removed
 - ✅ Metadata-based approach is cleaner and more flexible
-- ✅ `ExecuteAtVersionAsync` remains for explicit version control
 
 See [Rickten.Aggregator README](./Rickten.Aggregator/README.md) for details.
 
