@@ -99,6 +99,46 @@ public class ProjectionStoreTests
         Assert.Equal("Projection.OrderSummary.OrderSummaryState", entity.StateType);
     }
 
+    [Fact]
+    public async Task SaveProjectionAsync_IgnoresStaleSave_PreservesNewerCheckpoint()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var store = CreateStore(dbName);
+        var key = "OrderSummary4";
+
+        // Save at position 200
+        await store.SaveProjectionAsync(key, 200, new OrderSummaryState { Count = 200 });
+
+        // Try to save at older position 150 - should be ignored
+        await store.SaveProjectionAsync(key, 150, new OrderSummaryState { Count = 150 });
+
+        // Verify position 200 is still intact
+        var loaded = await store.LoadProjectionAsync<OrderSummaryState>(key);
+        Assert.NotNull(loaded);
+        Assert.Equal(200, loaded.GlobalPosition);
+        Assert.Equal(200, loaded.State.Count);
+    }
+
+    [Fact]
+    public async Task SaveProjectionAsync_SamePosition_UpdatesState()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var store = CreateStore(dbName);
+        var key = "OrderSummary5";
+
+        // Save at position 200
+        await store.SaveProjectionAsync(key, 200, new OrderSummaryState { Count = 200 });
+
+        // Save again at same position 200 with different state - should update
+        await store.SaveProjectionAsync(key, 200, new OrderSummaryState { Count = 999 });
+
+        // Verify state was updated
+        var loaded = await store.LoadProjectionAsync<OrderSummaryState>(key);
+        Assert.NotNull(loaded);
+        Assert.Equal(200, loaded.GlobalPosition);
+        Assert.Equal(999, loaded.State.Count);
+    }
+
     [Projection("OrderSummary")]
     private class OrderSummaryState
     {

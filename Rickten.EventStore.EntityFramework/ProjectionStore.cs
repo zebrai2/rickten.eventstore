@@ -79,6 +79,11 @@ public sealed class ProjectionStore : IProjectionStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Uses monotonic save semantics: only updates the projection if the new globalPosition
+    /// is greater than or equal to the existing GlobalPosition. This prevents stale checkpoints
+    /// from overwriting newer projection states.
+    /// </remarks>
     public async Task SaveProjectionAsync<TState>(
         string projectionKey,
         long globalPosition,
@@ -111,10 +116,15 @@ public sealed class ProjectionStore : IProjectionStore
         }
         else
         {
-            entity.GlobalPosition = globalPosition;
-            entity.StateType = stateType;
-            entity.State = serializedState;
-            entity.UpdatedAt = DateTime.UtcNow;
+            // Monotonic save: only update if new position is >= existing position
+            if (globalPosition >= entity.GlobalPosition)
+            {
+                entity.GlobalPosition = globalPosition;
+                entity.StateType = stateType;
+                entity.State = serializedState;
+                entity.UpdatedAt = DateTime.UtcNow;
+            }
+            // If globalPosition < entity.GlobalPosition, ignore the stale save
         }
 
         await _context.SaveChangesAsync(cancellationToken);

@@ -48,6 +48,11 @@ public sealed class SnapshotStore : ISnapshotStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Uses monotonic save semantics: only updates the snapshot if the new StreamPointer.Version
+    /// is greater than or equal to the existing snapshot version. This prevents stale snapshots
+    /// from overwriting newer aggregate states.
+    /// </remarks>
     public async Task SaveSnapshotAsync(
         StreamPointer streamPointer,
         object state,
@@ -77,10 +82,15 @@ public sealed class SnapshotStore : ISnapshotStore
         }
         else
         {
-            entity.Version = streamPointer.Version;
-            entity.StateType = stateType;
-            entity.State = serializedState;
-            entity.CreatedAt = DateTime.UtcNow;
+            // Monotonic save: only update if new version is >= existing version
+            if (streamPointer.Version >= entity.Version)
+            {
+                entity.Version = streamPointer.Version;
+                entity.StateType = stateType;
+                entity.State = serializedState;
+                entity.CreatedAt = DateTime.UtcNow;
+            }
+            // If streamPointer.Version < entity.Version, ignore the stale save
         }
 
         await _context.SaveChangesAsync(cancellationToken);
