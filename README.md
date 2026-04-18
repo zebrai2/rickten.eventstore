@@ -245,6 +245,8 @@ public record MyEvent(string Data);
 - **Name**: Event type name (e.g., "Created", "Updated", "Deleted")
 - **Version**: Schema version for handling event evolution
 
+**Wire Name Format:** The event store uses a wire name for filtering and storage: `{Aggregate}.{Name}.v{Version}`. For example, `[Event("Order", "Created", 1)]` produces the wire name `"Order.Created.v1"`. When filtering events with `eventsFilter`, you must use these wire names, not short names
+
 ### Stream Identifier
 
 Uniquely identifies an event stream:
@@ -462,7 +464,7 @@ public async Task ProcessAllEventsExample(IEventStore eventStore)
 ### Filtering Events
 
 ```csharp
-// Filter by stream type
+// Filter by stream type (aggregate)
 await foreach (var streamEvent in eventStore.LoadAllAsync(
     fromGlobalPosition: 0,
     streamTypeFilter: new[] { "Order", "Payment" }))
@@ -470,13 +472,14 @@ await foreach (var streamEvent in eventStore.LoadAllAsync(
     // Only Order and Payment events
 }
 
-// Filter by event type
+// Filter by event type using wire names: {Aggregate}.{Name}.v{Version}
 await foreach (var streamEvent in eventStore.LoadAllAsync(
     fromGlobalPosition: 0,
     streamTypeFilter: new[] { "Order" },
-    eventsFilter: new[] { "Created", "Paid" }))
+    eventsFilter: new[] { "Order.Created.v1", "Order.Paid.v1" }))
 {
-    // Only OrderCreated and OrderPaid events
+    // Only OrderCreatedEvent and OrderPaidEvent instances
+    // Wire names must match the [Event] attribute values
 }
 ```
 
