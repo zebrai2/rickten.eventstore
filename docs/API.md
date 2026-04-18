@@ -405,6 +405,29 @@ public sealed record EventMetadata(
 - `Key` (string): The metadata key
 - `Value` (object?): The metadata value
 
+**Important: Value Type After Storage**
+
+After round-trip through storage, non-null `Value` instances materialize as `System.Text.Json.JsonElement` rather than their original CLR types due to JSON serialization. Use the provided extension methods for safe, typed access:
+
+```csharp
+// Use extension methods on IReadOnlyList<EventMetadata>
+var timestamp = metadata.GetDateTime("Timestamp");
+var userId = metadata.GetString("UserId");
+var correlationId = metadata.GetGuid("CorrelationId");
+
+// Available: GetString, GetDateTime, GetGuid, GetInt32, GetInt64, 
+//            GetDecimal, GetDouble, GetBoolean
+```
+
+**Do not use direct casts** - they will fail after storage:
+```csharp
+// ? This will fail after round-trip
+var timestamp = metadata.First(m => m.Key == "Timestamp").Value as DateTime?;
+
+// ? Use this instead
+var timestamp = metadata.GetDateTime("Timestamp");
+```
+
 ---
 
 ### Snapshot

@@ -279,19 +279,33 @@ public class CompletedSessionsProjection : Projection<CompletedView>
 
 ### Using Metadata
 
+EventMetadata values are stored as `object?`, but after round-trip through storage, they materialize as `JsonElement` rather than their original CLR types. Use the safe typed extension methods:
+
 ```csharp
 protected override AuditView ApplyEvent(AuditView view, StreamEvent streamEvent)
 {
-    var timestamp = streamEvent.Metadata
-        .FirstOrDefault(m => m.Key == "Timestamp")?.Value as DateTime?;
-
-    var userId = streamEvent.Metadata
-        .FirstOrDefault(m => m.Key == "UserId")?.Value as string;
+    // Use extension methods for safe, typed access
+    var timestamp = streamEvent.Metadata.GetDateTime("Timestamp");
+    var userId = streamEvent.Metadata.GetString("UserId");
+    var correlationId = streamEvent.Metadata.GetGuid("CorrelationId");
+    var count = streamEvent.Metadata.GetInt32("Count");
 
     // Use metadata in projection logic
     return view with { /* ... */ };
 }
 ```
+
+**Available Extension Methods:**
+- `GetString(key)` - Returns `string?`
+- `GetDateTime(key)` - Returns `DateTime?`
+- `GetGuid(key)` - Returns `Guid?`
+- `GetInt32(key)` - Returns `int?`
+- `GetInt64(key)` - Returns `long?`
+- `GetDecimal(key)` - Returns `decimal?`
+- `GetDouble(key)` - Returns `double?`
+- `GetBoolean(key)` - Returns `bool?`
+
+All methods return `null` if the key is not found or the value is null.
 
 ## Relationship to Other Packages
 
