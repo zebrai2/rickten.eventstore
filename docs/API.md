@@ -414,8 +414,16 @@ public sealed record EventMetadata(
 
 **Properties:**
 - `Source` (string): The source of the metadata ("Client", "System", "Application")
+  - `"Client"` - Client-provided metadata via AppendMetadata
+  - `"System"` - Auto-added by EventStore (Timestamp, StreamVersion, EventId, BatchId, and auto-generated CorrelationId when none provided)
+  - `"Application"` - Custom application-level metadata
 - `Key` (string): The metadata key
 - `Value` (object?): The metadata value
+
+**CorrelationId Behavior:**
+- If provided via `AppendMetadata`: Tagged as `Source="Client"`
+- If not provided: Auto-generated with `Source="System"` for the entire batch
+- All events in a batch share the same CorrelationId
 
 **Important: Value Type After Storage**
 

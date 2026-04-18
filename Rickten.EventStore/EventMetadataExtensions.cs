@@ -222,18 +222,20 @@ public static class EventMetadataExtensions
     }
 
     /// <summary>
-    /// Gets the EventId from metadata.
+    /// Gets the system-generated EventId from metadata.
     /// EventId is a system-generated unique identifier for each persisted event.
+    /// This method only returns the System-source EventId to prevent spoofing.
     /// </summary>
     public static Guid? GetEventId(this IReadOnlyList<EventMetadata> metadata)
     {
-        return metadata.GetGuid(EventMetadataKeys.EventId);
+        return metadata.GetGuid(EventMetadataKeys.EventId, EventMetadataSource.System);
     }
 
     /// <summary>
     /// Gets the EventId from System metadata source.
     /// EventId is always system-generated; use this method when you specifically need
     /// to ensure you're reading the system-generated EventId (e.g., for CausationId tracking).
+    /// This is an alias for GetEventId for clarity in contexts where source verification is important.
     /// </summary>
     public static Guid? GetSystemEventId(this IReadOnlyList<EventMetadata> metadata)
     {
@@ -284,4 +286,18 @@ public static class EventMetadataExtensions
     {
         return metadata.GetInt64(EventMetadataKeys.StreamVersion);
     }
+
+    /// <summary>
+    /// Gets the first EventMetadata entry with the specified key, preserving its source.
+    /// Use this when you need to propagate metadata while maintaining its original source
+    /// (e.g., propagating a system-generated CorrelationId through reactions).
+    /// </summary>
+    /// <param name="metadata">The metadata collection to search.</param>
+    /// <param name="key">The metadata key to find.</param>
+    /// <returns>The EventMetadata entry if found, otherwise null.</returns>
+    public static EventMetadata? GetMetadataWithSource(this IReadOnlyList<EventMetadata> metadata, string key)
+    {
+        return metadata.FirstOrDefault(m => m.Key == key);
+    }
 }
+

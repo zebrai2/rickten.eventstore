@@ -72,88 +72,68 @@ public sealed class EventStore(
         }
     }
 
+    private static List<EventMetadata> TransformAppendMetadata(IReadOnlyList<AppendMetadata>? appendMetadata)
+    {
+        var metadata = new List<EventMetadata>();
+
+        if (appendMetadata == null) return metadata;
+
+        foreach (var clientMetadata in appendMetadata)
+        {
+            // Skip CorrelationId - it will be re-added from the validated batch CorrelationId
+            if (clientMetadata.IsCorrelationId()) continue;
+
+            metadata.Add(new EventMetadata(EventMetadataSource.Client, clientMetadata.Key, clientMetadata.Value));
+        }
+
+        return metadata;
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<StreamEvent>> AppendAsync(
         StreamPointer expectedVersion,
         IReadOnlyList<AppendEvent> events,
         CancellationToken cancellationToken = default)
     {
-        if (events.Count == 0)
-        {
-            return Array.Empty<StreamEvent>();
-        }
+        if (events.Count == 0) return [];
 
-        // Check current version (0 means new stream, no events written yet)
-        var currentVersion = await _context.Events
-            .Where(e => e.StreamType == expectedVersion.Stream.StreamType
-                     && e.StreamIdentifier == expectedVersion.Stream.Identifier)
-            .MaxAsync(e => (long?)e.Version, cancellationToken) ?? 0;
+        var expectedStream = expectedVersion.Stream;
+        var expectedStreamVersion = expectedVersion.Version;
 
+        var streamType = expectedStream.StreamType;
+        var streamIdentifier = expectedStream.Identifier;
+
+        var streamEvents = _context.Events;
+        var currentVersion = await streamEvents.GetCurrentVersionAsync(
+                                                    expectedStream,
+                                                    cancellationToken);
         if (currentVersion != expectedVersion.Version)
         {
             throw new StreamVersionConflictException(
-                expectedVersion,
-                new StreamPointer(expectedVersion.Stream, currentVersion),
-                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}. Expected {expectedVersion.Version}, actual {currentVersion}");
+                expectedVersion, new StreamPointer(expectedStream, currentVersion),
+                $"Stream version conflict for {streamType}/{streamIdentifier}. Expected {expectedStreamVersion}, actual {currentVersion}");
         }
 
-        var appendedEvents = new List<StreamEvent>();
-        // Events are 1-indexed; start from currentVersion + 1
-        var version = currentVersion + 1;
-
-        // Track the entities we're about to add so we can clean them up if the append fails
         var entitiesToAppend = new List<EventEntity>();
-
-        // Generate a shared BatchId for all events in this append operation
+        var version = ++currentVersion;
         var batchId = Guid.NewGuid();
+
+        // Validate all events in batch have matching aggregates
+        _registry.ValidateEventsForStream(events.GetEvents(), streamType);
+        var batchMetadata = events.GetCorrelationIdStreamMetadata();
 
         foreach (var appendEvent in events)
         {
-            // Validate that event aggregate matches stream type using the registry
-            var eventType = appendEvent.Event.GetType();
-            var eventMetadata = _registry.GetMetadataByType(eventType);
-            if (eventMetadata?.AggregateName != null && eventMetadata.AggregateName != expectedVersion.Stream.StreamType)
-            {
-                throw new InvalidOperationException(
-                    $"Event aggregate '{eventMetadata.AggregateName}' does not match stream type '{expectedVersion.Stream.StreamType}'. " +
-                    $"Event type: {eventType.FullName}");
-            }
-
-            // Transform AppendMetadata to EventMetadata with Source="Client"
-            // and add system metadata
-            var metadata = new List<EventMetadata>();
-
-            // Add client metadata first
-            if (appendEvent.Metadata != null)
-            {
-                foreach (var clientMetadata in appendEvent.Metadata)
-                {
-                    metadata.Add(new EventMetadata(EventMetadataSource.Client, clientMetadata.Key, clientMetadata.Value));
-                }
-            }
-
-            // Generate system EventId for this event
             var eventId = Guid.NewGuid();
+            var metadata = TransformAppendMetadata(appendEvent.Metadata);
 
-            // Ensure CorrelationId: use caller-provided if present, otherwise generate
-            var existingCorrelationId = appendEvent.Metadata?.FirstOrDefault(m => m.Key == EventMetadataKeys.CorrelationId);
-            if (existingCorrelationId == null)
-            {
-                // No caller-provided CorrelationId, generate one
-                metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.CorrelationId, Guid.NewGuid()));
-            }
-            // Otherwise caller-provided CorrelationId is already in metadata with "Client" source
-
-            // Add system metadata
-            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.EventId, eventId));
-            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.BatchId, batchId));
-            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.Timestamp, DateTime.UtcNow));
-            metadata.Add(new EventMetadata(EventMetadataSource.System, EventMetadataKeys.StreamVersion, version));
+            metadata.AddCorrelationId(batchMetadata);
+            metadata.AddSystemMetadata(version, batchId, eventId);
 
             var entity = new EventEntity
             {
-                StreamType = expectedVersion.Stream.StreamType,
-                StreamIdentifier = expectedVersion.Stream.Identifier,
+                StreamType = streamType,
+                StreamIdentifier = streamIdentifier,
                 Version = version,
                 EventType = _serializer.GetWireName(appendEvent.Event),
                 EventData = _serializer.Serialize(appendEvent.Event),
@@ -182,26 +162,26 @@ public sealed class EventStore(
 
             // Re-query to get the actual current version
             var actualVersion = await _context.Events
-                .Where(e => e.StreamType == expectedVersion.Stream.StreamType
-                         && e.StreamIdentifier == expectedVersion.Stream.Identifier)
+                .Where(e => e.StreamType == streamType
+                         && e.StreamIdentifier == streamIdentifier)
                 .MaxAsync(e => (long?)e.Version, cancellationToken) ?? 0;
 
             throw new StreamVersionConflictException(
                 expectedVersion,
-                new StreamPointer(expectedVersion.Stream, actualVersion),
-                $"Stream version conflict for {expectedVersion.Stream.StreamType}/{expectedVersion.Stream.Identifier}",
+                new StreamPointer(expectedStream, actualVersion),
+                $"Stream version conflict for {streamType}/{streamIdentifier}",
                 ex);
         }
 
         // Load back with global positions (only the newly appended events)
         var loadedEvents = await _context.Events
-            .Where(e => e.StreamType == expectedVersion.Stream.StreamType
-                     && e.StreamIdentifier == expectedVersion.Stream.Identifier
-                     && e.Version > expectedVersion.Version)
+            .Where(e => e.StreamType == streamType
+                     && e.StreamIdentifier == streamIdentifier
+                     && e.Version > expectedStreamVersion)
             .OrderBy(e => e.Version)
             .ToListAsync(cancellationToken);
 
-        return loadedEvents.Select(MapToStreamEvent).ToList();
+        return [.. loadedEvents.Select(MapToStreamEvent)];
     }
 
     private StreamEvent MapToStreamEvent(EventEntity entity)

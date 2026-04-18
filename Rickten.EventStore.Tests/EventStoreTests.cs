@@ -228,22 +228,24 @@ public class EventStoreTests
         Assert.Single(loaded);
         var metadata = loaded[0].Metadata;
 
-        // Should have 3 client metadata + 5 system metadata (EventId, BatchId, CorrelationId (generated), Timestamp, StreamVersion)
-        // Note: CorrelationId is provided by client, so it's Client source, not generated
+        // Should have 2 client metadata + 1 batch CorrelationId + 4 system metadata (EventId, BatchId, Timestamp, StreamVersion)
+        // Note: CorrelationId is extracted from batch and re-added, preserving Client source
         Assert.Equal(7, metadata.Count);
 
         // Verify client metadata (automatically tagged as "Client")
         Assert.Equal(EventMetadataSource.Client, metadata[0].Source);
-        Assert.Equal("CorrelationId", metadata[0].Key);
-        Assert.Equal(correlationId, metadata[0].Value?.ToString());
+        Assert.Equal("UserId", metadata[0].Key);
+        Assert.Equal(userId, metadata[0].Value?.ToString());
 
         Assert.Equal(EventMetadataSource.Client, metadata[1].Source);
-        Assert.Equal("UserId", metadata[1].Key);
-        Assert.Equal(userId, metadata[1].Value?.ToString());
+        Assert.Equal("RequestId", metadata[1].Key);
+        Assert.Equal(requestId, metadata[1].Value?.ToString());
 
-        Assert.Equal(EventMetadataSource.Client, metadata[2].Source);
-        Assert.Equal("RequestId", metadata[2].Key);
-        Assert.Equal(requestId, metadata[2].Value?.ToString());
+        // Verify batch CorrelationId (extracted from client metadata and re-added from batch)
+        var batchCorrelationId = metadata.FirstOrDefault(m => m.Key == EventMetadataKeys.CorrelationId);
+        Assert.NotNull(batchCorrelationId);
+        Assert.Equal(EventMetadataSource.Client, batchCorrelationId.Source);
+        Assert.Equal(correlationId, batchCorrelationId.Value?.ToString());
 
         // Verify system metadata (automatically added)
         // EventId, BatchId, Timestamp, StreamVersion

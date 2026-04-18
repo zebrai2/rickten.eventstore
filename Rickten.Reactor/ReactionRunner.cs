@@ -191,14 +191,16 @@ public static class ReactionRunner
                 var commands = reaction.Process(projectionView, streamEvent);
 
                 // Build metadata for outgoing commands from the trigger event
-                // Propagate CorrelationId from trigger, set CausationId to trigger's EventId
+                // Propagate CorrelationId from trigger with source preservation
+                // Set CausationId to trigger's EventId
                 var reactionMetadata = new List<AppendMetadata>();
 
-                // Propagate CorrelationId if present in trigger event
-                var triggerCorrelationId = streamEvent.Metadata.GetCorrelationId();
-                if (triggerCorrelationId.HasValue)
+                // Propagate CorrelationId while preserving its source (Client or System)
+                var triggerCorrelationMetadata = streamEvent.Metadata.GetMetadataWithSource(EventMetadataKeys.CorrelationId);
+                if (triggerCorrelationMetadata != null)
                 {
-                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CorrelationId, triggerCorrelationId.Value));
+                    // Pass the EventMetadata as the value to preserve source information
+                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CorrelationId, triggerCorrelationMetadata));
                 }
 
                 // Set CausationId to the trigger event's system-generated EventId

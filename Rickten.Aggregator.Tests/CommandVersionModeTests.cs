@@ -642,4 +642,9 @@ internal class FilteringTypeMetadataRegistry : EventStore.TypeMetadata.ITypeMeta
     {
         return _inner.GetEventTypesForAggregate(aggregateName);
     }
+
+    public void ValidateEventsForStream(IEnumerable<object> events, string expectedStreamType)
+    {
+        _inner.ValidateEventsForStream(events, expectedStreamType);
+    }
 }
