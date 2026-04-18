@@ -195,12 +195,12 @@ public static class ReactionRunner
                 // Set CausationId to trigger's EventId
                 var reactionMetadata = new List<AppendMetadata>();
 
-                // Propagate CorrelationId while preserving its source (Client or System)
-                var triggerCorrelationMetadata = streamEvent.Metadata.GetMetadataWithSource(EventMetadataKeys.CorrelationId);
-                if (triggerCorrelationMetadata != null)
+                // Propagate CorrelationId value (source will be Client in reaction)
+                var triggerCorrelationId = streamEvent.Metadata.GetCorrelationId();
+                if (triggerCorrelationId != null)
                 {
-                    // Pass the EventMetadata as the value to preserve source information
-                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CorrelationId, triggerCorrelationMetadata));
+                    // Pass just the value - reaction will be tagged as Client source
+                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CorrelationId, triggerCorrelationId));
                 }
 
                 // Set CausationId to the trigger event's system-generated EventId
