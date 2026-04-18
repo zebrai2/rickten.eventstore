@@ -44,7 +44,7 @@ public interface ICommandDecider<TState, TCommand>
 - Validates produced events match the aggregate
 - Separates validation from event production
 - Provides helper methods: `Event()`, `NoEvents()`, `Events()`, `Require()`, `RequireEqual()`, `RequireNotNull()`
-- Provides `CreateStreamId(identifier)` helper for stream identifier creation
+- Provides **protected** `CreateStreamId(identifier)` helper for stream identifier creation within decider implementations
 - Clean `ValidateCommand()` and `ExecuteCommand()` methods to override
 
 ### StateRunner
@@ -232,6 +232,9 @@ public abstract record SessionReviewCommand
 
     [Command("SessionReview")]
     public sealed record ProvideFeedback(int Rating, string? Comment) : SessionReviewCommand;
+
+    [Command("SessionReview")]
+    public sealed record CompleteSession : SessionReviewCommand;
 }
 ```
 
@@ -350,10 +353,10 @@ var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>(); 
 var folder = new SessionReviewStateFolder(registry);
 var decider = new SessionReviewCommandDecider();
 
-// Use the helper to create stream identifier
-var streamId = decider.CreateStreamId("session-1");
+// Create stream identifier directly - CreateStreamId is a protected helper
+var streamId = new StreamIdentifier("SessionReview", "session-1");
 
-// Execute a command (with automatic snapshots if configured)
+// Execute a command (with automatic snapshots if configured on state type)
 var command = new SessionReviewCommand.StartSession("session-1", "user-123");
 var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
     eventStore,
