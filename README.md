@@ -245,7 +245,7 @@ public record MyEvent(string Data);
 - **Name**: Event type name (e.g., "Created", "Updated", "Deleted")
 - **Version**: Schema version for handling event evolution
 
-**Wire Name Format:** The event store uses a wire name for filtering and storage: `{Aggregate}.{Name}.v{Version}`. For example, `[Event("Order", "Created", 1)]` produces the wire name `"Order.Created.v1"`. When filtering events with `eventsFilter`, you must use these wire names, not short names
+**Wire Name Format:** The event store uses a wire name for filtering and storage: `{Aggregate}.{Name}.v{Version}`. For example, `[Event("Order", "Created", 1)]` produces the wire name `"Order.Created.v1"`. When filtering events with `eventsFilter`, you must use these wire names, not short names.
 
 ### Stream Identifier
 
