@@ -566,6 +566,71 @@ public class CommandVersionModeTests
             Assert.Equal(2, result.Version);
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WithExpectedVersionKey_DoesNotPersistExpectedVersionInEventMetadata()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new MetadataVersionTestStateFolder(registry);
+            var decider = new MetadataVersionTestDecider();
+            var streamId = new StreamIdentifier("MetadataVersionTest", "metadata-filtering-test");
+
+            // Create version 1
+            await StateRunner.ExecuteAsync(eventStore, folder, decider, streamId, new LatestVersionCommand(), registry);
+
+            // Act: Execute with expected version + additional metadata
+            var result = await StateRunner.ExecuteAsync(
+                eventStore,
+                folder,
+                decider,
+                streamId,
+                new ExpectedVersionCommand("order-1"),
+                registry,
+                metadata:
+                [
+                    new AppendMetadata("ExpectedVersion", 1L),
+                    new AppendMetadata("CorrelationId", "correlation-123"),
+                    new AppendMetadata("UserId", "user-456")
+                ]);
+
+            // Assert: Event was appended successfully
+            Assert.Single(result.Events);
+            Assert.Equal(2, result.Version);
+
+            // Load events from store to verify metadata
+            var loadedEvents = new List<StreamEvent>();
+            await foreach (var e in eventStore.LoadAsync(new StreamPointer(streamId, 0)))
+                loadedEvents.Add(e);
+
+            // Should have 2 events (version 1 and version 2)
+            Assert.Equal(2, loadedEvents.Count);
+
+            // Check the second event (the one we just appended with metadata)
+            var persistedEvent = loadedEvents[1];
+
+            // Verify: ExpectedVersion key NOT in persisted metadata
+            var expectedVersionMetadata = persistedEvent.Metadata
+                .FirstOrDefault(m => m.Key == "ExpectedVersion");
+            Assert.Null(expectedVersionMetadata);
+
+            // Verify: Other metadata WAS persisted
+            var correlationIdMetadata = persistedEvent.Metadata
+                .FirstOrDefault(m => m.Key == "CorrelationId");
+            Assert.NotNull(correlationIdMetadata);
+            Assert.Equal("correlation-123", correlationIdMetadata.Value?.ToString());
+
+            var userIdMetadata = persistedEvent.Metadata
+                .FirstOrDefault(m => m.Key == "UserId");
+            Assert.NotNull(userIdMetadata);
+            Assert.Equal("user-456", userIdMetadata.Value?.ToString());
+        }
+    }
 }
 
 // Test domain for metadata-based version tests

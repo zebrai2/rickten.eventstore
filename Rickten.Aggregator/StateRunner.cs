@@ -126,7 +126,7 @@ public static class StateRunner
         CancellationToken cancellationToken = default)
     {
         // Extract expected version from metadata if command declares ExpectedVersionKey
-        var expectedVersion = GetExpectedVersionFromMetadata(command, metadata, registry);
+        var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata, registry);
 
         return await ExecuteCoreAsync(
             eventStore,
@@ -135,6 +135,7 @@ public static class StateRunner
             streamIdentifier,
             command,
             expectedVersion,
+            expectedVersionKey,
             snapshotStore,
             metadata,
             cancellationToken);
@@ -142,8 +143,9 @@ public static class StateRunner
 
     /// <summary>
     /// Extracts expected version from metadata if the command has an ExpectedVersionKey.
+    /// Returns both the expected version and the key name so it can be filtered from persisted metadata.
     /// </summary>
-    private static long? GetExpectedVersionFromMetadata<TCommand>(
+    private static (long? expectedVersion, string? expectedVersionKey) GetExpectedVersionFromMetadata<TCommand>(
         TCommand command,
         IReadOnlyList<AppendMetadata>? metadata,
         EventStore.TypeMetadata.ITypeMetadataRegistry registry)
@@ -151,7 +153,7 @@ public static class StateRunner
         var commandType = command?.GetType();
         if (commandType == null)
         {
-            return null;
+            return (null, null);
         }
 
         // Get command metadata from registry
@@ -159,7 +161,7 @@ public static class StateRunner
         if (typeMetadata?.AttributeInstance is not CommandAttribute commandAttr)
         {
             // Command not registered or not a CommandAttribute - use latest version behavior
-            return null;
+            return (null, null);
         }
 
         var expectedVersionKey = commandAttr.ExpectedVersionKey;
@@ -167,7 +169,7 @@ public static class StateRunner
         // If no ExpectedVersionKey is specified, return null (latest-version behavior)
         if (string.IsNullOrWhiteSpace(expectedVersionKey))
         {
-            return null;
+            return (null, null);
         }
 
         // Find metadata item with matching key
@@ -189,7 +191,7 @@ public static class StateRunner
         }
 
         // Convert to long - support long, int, and parseable strings
-        return metadataValue switch
+        var version = metadataValue switch
         {
             long longValue => longValue,
             int intValue => intValue,
@@ -199,6 +201,8 @@ public static class StateRunner
             _ => throw new InvalidOperationException(
                 $"Command '{commandType.Name}' expected version metadata key '{expectedVersionKey}' has value of type '{metadataValue.GetType().Name}' which cannot be converted to long.")
         };
+
+        return (version, expectedVersionKey);
     }
 
     /// <summary>
@@ -229,6 +233,7 @@ public static class StateRunner
         IReadOnlyList<AppendMetadata>? metadata = null,
         CancellationToken cancellationToken = default)
     {
+        // ExecuteAtVersionAsync uses explicit version, no metadata key to filter
         return ExecuteCoreAsync(
             eventStore,
             folder,
@@ -236,6 +241,7 @@ public static class StateRunner
             streamIdentifier,
             command,
             expectedVersion,
+            expectedVersionKey: null,
             snapshotStore,
             metadata,
             cancellationToken);
@@ -248,6 +254,7 @@ public static class StateRunner
         StreamIdentifier streamIdentifier,
         TCommand command,
         long? expectedVersion,
+        string? expectedVersionKey,
         ISnapshotStore? snapshotStore,
         IReadOnlyList<AppendMetadata>? metadata,
         CancellationToken cancellationToken)
@@ -274,10 +281,20 @@ public static class StateRunner
             return (state, currentVersion, []);
         }
 
+        // Filter expected version key from metadata before persisting
+        // Expected version is request/decision context, not event data
+        var filteredMetadata = metadata;
+        if (!string.IsNullOrWhiteSpace(expectedVersionKey) && metadata != null)
+        {
+            filteredMetadata = metadata
+                .Where(m => !string.Equals(m.Key, expectedVersionKey, StringComparison.Ordinal))
+                .ToList();
+        }
+
         // Append events to store with current version (or expected version if specified)
         var appendVersion = expectedVersion ?? currentVersion;
         var pointer = new StreamPointer(streamIdentifier, appendVersion);
-        var appendEvents = events.Select(e => new AppendEvent(e, metadata)).ToList();
+        var appendEvents = events.Select(e => new AppendEvent(e, filteredMetadata)).ToList();
         var appendedEvents = await eventStore.AppendAsync(pointer, appendEvents, cancellationToken);
 
         // Fold events into state
