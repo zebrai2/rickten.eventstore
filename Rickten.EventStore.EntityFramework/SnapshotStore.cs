@@ -36,6 +36,7 @@ public sealed class SnapshotStore : ISnapshotStore
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.Snapshots
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 s => s.StreamType == streamIdentifier.StreamType
                   && s.StreamIdentifier == streamIdentifier.Identifier,
@@ -70,13 +71,11 @@ public sealed class SnapshotStore : ISnapshotStore
 
         while (true)
         {
-            // Ensure clean change tracker for fresh database read
-            _context.ChangeTracker.Clear();
-
             var now = DateTime.UtcNow;
 
-            // Check if snapshot exists
+            // Check if snapshot exists (use AsNoTracking to avoid polluting change tracker)
             var currentVersion = await _context.Snapshots
+                .AsNoTracking()
                 .Where(s => s.StreamType == streamPointer.Stream.StreamType
                          && s.StreamIdentifier == streamPointer.Stream.Identifier)
                 .Select(s => (long?)s.Version)
@@ -103,7 +102,8 @@ public sealed class SnapshotStore : ISnapshotStore
                 }
                 catch (DbUpdateException)
                 {
-                    // Another process inserted first, retry the update path
+                    // Another process inserted first, detach this entity and retry the update path
+                    _context.Entry(entity).State = EntityState.Detached;
                     continue;
                 }
             }

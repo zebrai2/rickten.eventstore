@@ -45,6 +45,7 @@ public sealed class ProjectionStore : IProjectionStore
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.Projections
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 p => p.Namespace == @namespace && p.ProjectionKey == projectionKey,
                 cancellationToken);
@@ -105,13 +106,11 @@ public sealed class ProjectionStore : IProjectionStore
 
         while (true)
         {
-            // Ensure clean change tracker for fresh database read
-            _context.ChangeTracker.Clear();
-
             var now = DateTime.UtcNow;
 
-            // Check if projection exists
+            // Check if projection exists (use AsNoTracking to avoid polluting change tracker)
             var currentPosition = await _context.Projections
+                .AsNoTracking()
                 .Where(p => p.Namespace == @namespace && p.ProjectionKey == projectionKey)
                 .Select(p => (long?)p.GlobalPosition)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -137,7 +136,8 @@ public sealed class ProjectionStore : IProjectionStore
                 }
                 catch (DbUpdateException)
                 {
-                    // Another process inserted first, retry the update path
+                    // Another process inserted first, detach our failed insert and retry the update path
+                    _context.Entry(entity).State = EntityState.Detached;
                     continue;
                 }
             }
