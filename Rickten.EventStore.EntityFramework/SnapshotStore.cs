@@ -25,6 +25,11 @@ public sealed class SnapshotStore : ISnapshotStore
         _serializer = new WireTypeSerializer(registry);
     }
 
+    private bool IsInMemoryProvider()
+    {
+        return _context.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+    }
+
     /// <inheritdoc />
     public async Task<Snapshot?> LoadSnapshotAsync(
         StreamIdentifier streamIdentifier,
@@ -49,50 +54,107 @@ public sealed class SnapshotStore : ISnapshotStore
 
     /// <inheritdoc />
     /// <remarks>
-    /// Uses monotonic save semantics: only updates the snapshot if the new StreamPointer.Version
-    /// is greater than or equal to the existing snapshot version. This prevents stale snapshots
-    /// from overwriting newer aggregate states.
+    /// Uses monotonic save semantics enforced at the database level: only updates the snapshot
+    /// if the new StreamPointer.Version is greater than or equal to the existing snapshot version.
+    /// Uses a conditional UPDATE with a WHERE clause that checks Version at the database boundary.
+    /// This prevents stale snapshots from overwriting newer aggregate states, even under
+    /// concurrent write conditions.
     /// </remarks>
     public async Task SaveSnapshotAsync(
         StreamPointer streamPointer,
         object state,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.Snapshots
-            .FirstOrDefaultAsync(
-                s => s.StreamType == streamPointer.Stream.StreamType
-                  && s.StreamIdentifier == streamPointer.Stream.Identifier,
-                cancellationToken);
-
         var serializedState = _serializer.Serialize(state);
         var stateType = _serializer.GetWireName(state);
 
-        if (entity == null)
+        while (true)
         {
-            entity = new SnapshotEntity
-            {
-                StreamType = streamPointer.Stream.StreamType,
-                StreamIdentifier = streamPointer.Stream.Identifier,
-                Version = streamPointer.Version,
-                StateType = stateType,
-                State = serializedState,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.Snapshots.Add(entity);
-        }
-        else
-        {
-            // Monotonic save: only update if new version is >= existing version
-            if (streamPointer.Version >= entity.Version)
-            {
-                entity.Version = streamPointer.Version;
-                entity.StateType = stateType;
-                entity.State = serializedState;
-                entity.CreatedAt = DateTime.UtcNow;
-            }
-            // If streamPointer.Version < entity.Version, ignore the stale save
-        }
+            // Ensure clean change tracker for fresh database read
+            _context.ChangeTracker.Clear();
 
-        await _context.SaveChangesAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+
+            // Check if snapshot exists
+            var currentVersion = await _context.Snapshots
+                .Where(s => s.StreamType == streamPointer.Stream.StreamType
+                         && s.StreamIdentifier == streamPointer.Stream.Identifier)
+                .Select(s => (long?)s.Version)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (currentVersion == null)
+            {
+                // Insert new snapshot
+                var entity = new SnapshotEntity
+                {
+                    StreamType = streamPointer.Stream.StreamType,
+                    StreamIdentifier = streamPointer.Stream.Identifier,
+                    Version = streamPointer.Version,
+                    StateType = stateType,
+                    State = serializedState,
+                    CreatedAt = now
+                };
+                _context.Snapshots.Add(entity);
+
+                try
+                {
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return; // Success
+                }
+                catch (DbUpdateException)
+                {
+                    // Another process inserted first, retry the update path
+                    continue;
+                }
+            }
+
+            // Check monotonic condition: only update if new version >= existing
+            if (streamPointer.Version < currentVersion.Value)
+            {
+                // Stale save, silently ignore
+                return;
+            }
+
+            // Use ExecuteUpdate for real databases (atomic), fallback to tracked updates for InMemory
+            if (IsInMemoryProvider())
+            {
+                // InMemory fallback: load, update, save (no race protection but acceptable for tests)
+                var entity = await _context.Snapshots
+                    .FirstAsync(s => s.StreamType == streamPointer.Stream.StreamType
+                                  && s.StreamIdentifier == streamPointer.Stream.Identifier,
+                        cancellationToken);
+
+                // Re-check monotonic condition in case another test modified it
+                if (streamPointer.Version >= entity.Version)
+                {
+                    entity.Version = streamPointer.Version;
+                    entity.StateType = stateType;
+                    entity.State = serializedState;
+                    entity.CreatedAt = now;
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                return;
+            }
+
+            // Production path: atomic conditional update at database level
+            var rowsAffected = await _context.Snapshots
+                .Where(s => s.StreamType == streamPointer.Stream.StreamType
+                         && s.StreamIdentifier == streamPointer.Stream.Identifier
+                         && s.Version == currentVersion.Value)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.Version, streamPointer.Version)
+                    .SetProperty(s => s.StateType, stateType)
+                    .SetProperty(s => s.State, serializedState)
+                    .SetProperty(s => s.CreatedAt, now),
+                    cancellationToken);
+
+            if (rowsAffected > 0)
+            {
+                // Update succeeded
+                return;
+            }
+
+            // Another process modified the snapshot between our read and update, retry
+        }
     }
 }
