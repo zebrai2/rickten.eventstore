@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using Rickten.EventStore.TypeMetadata;
 using Rickten.Aggregator;
@@ -49,7 +50,7 @@ public class SnapshotRoundTripTests
         return new EventStoreDbContext(options);
     }
 
-    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), Registry);
+    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), new WireTypeSerializer(Registry));
 
     [Fact]
     public async Task SaveAndLoad_VerifiesPayloadDataRoundTrip()
@@ -91,7 +92,7 @@ public class SnapshotRoundTripTests
         // Verify that the snapshot stores and uses the wire name for StateType
         var dbName = Guid.NewGuid().ToString();
         var context = CreateContext(dbName);
-        var store = new SnapshotStore(context, Registry);
+        var store = new SnapshotStore(context, new EntityFramework.Serialization.WireTypeSerializer(Registry));
 
         var pointer = new StreamPointer(new StreamIdentifier("ShoppingCart", "cart-789"), 3);
         var state = new ShoppingCartState("cust-1", 50m, 2, DateTime.UtcNow, false);
@@ -248,7 +249,7 @@ public class SnapshotRoundTripTests
         // Verify that multiple saves to the same stream result in a single snapshot (latest)
         var dbName = Guid.NewGuid().ToString();
         var context = CreateContext(dbName);
-        var store = new SnapshotStore(context, Registry);
+        var store = new SnapshotStore(context, new EntityFramework.Serialization.WireTypeSerializer(Registry));
 
         var streamId = new StreamIdentifier("ShoppingCart", "cart-update-test");
 

@@ -196,4 +196,108 @@ public static class EventMetadataExtensions
 
         return null;
     }
+
+    /// <summary>
+    /// Safely gets a Guid value from metadata with a specific source.
+    /// Returns null if the metadata is not found with the specified source, the value is null, or cannot be parsed.
+    /// </summary>
+    public static Guid? GetGuid(this IReadOnlyList<EventMetadata> metadata, string key, string source)
+    {
+        var meta = metadata.FirstOrDefault(m => m.Key == key && m.Source == source);
+        if (meta?.Value is null)
+            return null;
+
+        if (meta.Value is Guid guid)
+            return guid;
+
+        if (meta.Value is JsonElement jsonElement)
+        {
+            if (jsonElement.ValueKind == JsonValueKind.String)
+            {
+                return jsonElement.TryGetGuid(out var parsed) ? parsed : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the system-generated EventId from metadata.
+    /// EventId is a system-generated unique identifier for each persisted event.
+    /// This method only returns the System-source EventId to prevent spoofing.
+    /// </summary>
+    public static Guid? GetEventId(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetGuid(EventMetadataKeys.EventId, EventMetadataSource.System);
+    }
+
+    /// <summary>
+    /// Gets the EventId from System metadata source.
+    /// EventId is always system-generated; use this method when you specifically need
+    /// to ensure you're reading the system-generated EventId (e.g., for CausationId tracking).
+    /// This is an alias for GetEventId for clarity in contexts where source verification is important.
+    /// </summary>
+    public static Guid? GetSystemEventId(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetGuid(EventMetadataKeys.EventId, EventMetadataSource.System);
+    }
+
+    /// <summary>
+    /// Gets the CorrelationId from metadata.
+    /// CorrelationId tracks related events across aggregate boundaries.
+    /// </summary>
+    public static Guid? GetCorrelationId(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetGuid(EventMetadataKeys.CorrelationId);
+    }
+
+    /// <summary>
+    /// Gets the CausationId from metadata.
+    /// CausationId references the EventId of the event that caused this event.
+    /// </summary>
+    public static Guid? GetCausationId(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetGuid(EventMetadataKeys.CausationId);
+    }
+
+    /// <summary>
+    /// Gets the BatchId from metadata.
+    /// BatchId is shared by all events produced by a single command execution.
+    /// </summary>
+    public static Guid? GetBatchId(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetGuid(EventMetadataKeys.BatchId);
+    }
+
+    /// <summary>
+    /// Gets the Timestamp from metadata.
+    /// Timestamp is the UTC time when the event was persisted to the event store.
+    /// </summary>
+    public static DateTime? GetTimestamp(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetDateTime(EventMetadataKeys.Timestamp);
+    }
+
+    /// <summary>
+    /// Gets the StreamVersion from metadata.
+    /// StreamVersion is the version number of this event within its stream (1-indexed).
+    /// </summary>
+    public static long? GetStreamVersion(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetInt64(EventMetadataKeys.StreamVersion);
+    }
+
+    /// <summary>
+    /// Gets the first EventMetadata entry with the specified key, preserving its source.
+    /// Use this when you need to propagate metadata while maintaining its original source
+    /// (e.g., propagating a system-generated CorrelationId through reactions).
+    /// </summary>
+    /// <param name="metadata">The metadata collection to search.</param>
+    /// <param name="key">The metadata key to find.</param>
+    /// <returns>The EventMetadata entry if found, otherwise null.</returns>
+    public static EventMetadata? GetMetadataWithSource(this IReadOnlyList<EventMetadata> metadata, string key)
+    {
+        return metadata.FirstOrDefault(m => m.Key == key);
+    }
 }
+

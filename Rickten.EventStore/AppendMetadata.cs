@@ -8,4 +8,14 @@ namespace Rickten.EventStore;
 /// <param name="Value">The metadata value.</param>
 public sealed record AppendMetadata(
     string Key,
-    object? Value);
+    object? Value)
+{
+    /// <summary>
+    /// returns true if this metadata is a correlation ID, which is used for tracing related events across different streams and services.
+    /// </summary>
+    /// <returns></returns>
+    public bool IsCorrelationId()
+    {
+        return Key == EventMetadataKeys.CorrelationId;
+    }
+}

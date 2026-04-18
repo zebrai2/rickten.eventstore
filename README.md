@@ -360,8 +360,14 @@ var correlationId = streamEvent.Metadata.GetGuid("CorrelationId");
 
 **Source Types:**
 - **"Client"** - Automatically assigned to all client-provided metadata
-- **"System"** - Automatically added by the event store (Timestamp, StreamVersion, etc.)
+- **"System"** - Automatically added by the event store (Timestamp, StreamVersion, EventId, BatchId, and auto-generated CorrelationId when none provided)
 - **"Application"** - Can be added by custom event handlers or middleware
+
+**CorrelationId Special Handling:**
+- If you provide a `CorrelationId` in `AppendMetadata`, it becomes `Source="Client"`
+- If you don't provide a `CorrelationId`, the system auto-generates one with `Source="System"` for the entire batch
+- All events in the same batch share the same `CorrelationId`
+- When propagating `CorrelationId` to reaction events, use the value directly—the reaction will be tagged as `Source="Client"` (since it's client-provided metadata)
 
 **Security Benefit:** Clients cannot spoof system metadata because they only provide `AppendMetadata` (no Source field).
 
@@ -1228,6 +1234,29 @@ var events = new[]
 // System automatically adds:
 // - EventMetadata("System", "Timestamp", DateTime.UtcNow)
 // - EventMetadata("System", "StreamVersion", version)
+// - EventMetadata("System", "EventId", Guid.NewGuid())
+// - EventMetadata("System", "BatchId", Guid.NewGuid())
+```
+
+**Propagating CorrelationId in Reactions:**
+```csharp
+// In a reaction, get the CorrelationId from trigger event
+var triggerCorrelationId = triggerEvent.Metadata.GetGuid("CorrelationId");
+
+// Propagate it to reaction events
+var reactionEvents = new[]
+{
+    new AppendEvent(
+        new ReactionEvent(...),
+        new[]
+        {
+            new AppendMetadata("CorrelationId", triggerCorrelationId),
+            new AppendMetadata("CausationId", triggerEvent.Metadata.GetGuid("EventId"))
+        })
+};
+
+// The reaction's CorrelationId will be tagged as Source="Client"
+// (even though the trigger may have been Source="System")
 ```
 
 ### 3. **Snapshot Large Aggregates**

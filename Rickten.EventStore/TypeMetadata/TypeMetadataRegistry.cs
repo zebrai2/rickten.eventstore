@@ -57,6 +57,23 @@ public sealed class TypeMetadataRegistry : ITypeMetadataRegistry
             : Array.Empty<Type>();
     }
 
+    /// <inheritdoc />
+    public void ValidateEventsForStream(IEnumerable<object> events, string expectedStreamType)
+    {
+        foreach (var evt in events)
+        {
+            var eventType = evt.GetType();
+            var eventMetadata = GetMetadataByType(eventType);
+
+            if (eventMetadata?.AggregateName != null && eventMetadata.AggregateName != expectedStreamType)
+            {
+                throw new InvalidOperationException(
+                    $"Event aggregate '{eventMetadata.AggregateName}' does not match stream type '{expectedStreamType}'. " +
+                    $"Event type: {eventType.FullName}");
+            }
+        }
+    }
+
 
 
     private static void ScanAssembly(

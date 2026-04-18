@@ -26,4 +26,12 @@ public interface ITypeMetadataRegistry
     /// <param name="aggregateName">The aggregate name.</param>
     /// <returns>A readonly collection of event types for the aggregate.</returns>
     IReadOnlyCollection<Type> GetEventTypesForAggregate(string aggregateName);
+
+    /// <summary>
+    /// Validates that all events have aggregates matching the expected stream type.
+    /// </summary>
+    /// <param name="events">The events to validate.</param>
+    /// <param name="expectedStreamType">The expected stream type.</param>
+    /// <exception cref="InvalidOperationException">Thrown when an event's aggregate doesn't match the stream type.</exception>
+    void ValidateEventsForStream(IEnumerable<object> events, string expectedStreamType);
 }

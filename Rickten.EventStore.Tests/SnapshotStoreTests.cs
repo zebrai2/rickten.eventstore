@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using Rickten.EventStore.TypeMetadata;
 using Rickten.Aggregator;
@@ -23,7 +24,7 @@ public class SnapshotStoreTests
         return new EventStoreDbContext(options);
     }
 
-    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), Registry);
+    private SnapshotStore CreateStore(string dbName) => new SnapshotStore(CreateContext(dbName), new WireTypeSerializer(Registry));
 
     [Fact]
     public async Task SaveAndLoadSnapshot_VerifiesVersionAndPayload()

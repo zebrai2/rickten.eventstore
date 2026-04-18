@@ -9,21 +9,15 @@ namespace Rickten.EventStore.EntityFramework;
 /// Entity Framework Core implementation of <see cref="IProjectionStore"/>.
 /// Projection state types must be decorated with [Projection] attribute for type resolution.
 /// </summary>
-public sealed class ProjectionStore : IProjectionStore
+/// <remarks>
+/// Initializes a new instance of the <see cref="ProjectionStore"/> class.
+/// </remarks>
+/// <param name="context">The database context.</param>
+/// <param name="serializer">The wire type serializer.</param>
+public sealed class ProjectionStore(EventStoreDbContext context, WireTypeSerializer serializer) : IProjectionStore
 {
-    private readonly EventStoreDbContext _context;
-    private readonly WireTypeSerializer _serializer;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectionStore"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
-    /// <param name="registry">The type metadata registry.</param>
-    public ProjectionStore(EventStoreDbContext context, ITypeMetadataRegistry registry)
-    {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
-        _serializer = new WireTypeSerializer(registry);
-    }
+    private readonly EventStoreDbContext _context = context ?? throw new ArgumentNullException(nameof(context));
+    private readonly WireTypeSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
 
     private bool IsInMemoryProvider()
     {

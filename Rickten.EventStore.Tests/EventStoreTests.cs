@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using Rickten.EventStore.TypeMetadata;
 using System;
@@ -31,7 +32,7 @@ public class EventStoreTests
         return new EventStoreDbContext(options);
     }
 
-    private EventStore CreateStore(string dbName) => new EventStore(CreateContext(dbName), Registry);
+    private EventStore CreateStore(string dbName) => new EventStore(CreateContext(dbName), Registry, new WireTypeSerializer(Registry));
 
     private StreamPointer MakePointer(string streamType, string streamId, long version) =>
         new StreamPointer(new StreamIdentifier(streamType, streamId), version);
@@ -227,30 +228,36 @@ public class EventStoreTests
         Assert.Single(loaded);
         var metadata = loaded[0].Metadata;
 
-        // Should have 3 client metadata + 2 system metadata (Timestamp, StreamVersion)
-        Assert.Equal(5, metadata.Count);
+        // Should have 2 client metadata + 1 batch CorrelationId + 4 system metadata (EventId, BatchId, Timestamp, StreamVersion)
+        // Note: CorrelationId is extracted from batch and re-added, preserving Client source
+        Assert.Equal(7, metadata.Count);
 
         // Verify client metadata (automatically tagged as "Client")
-        Assert.Equal("Client", metadata[0].Source);
-        Assert.Equal("CorrelationId", metadata[0].Key);
-        Assert.Equal(correlationId, metadata[0].Value?.ToString());
+        Assert.Equal(EventMetadataSource.Client, metadata[0].Source);
+        Assert.Equal("UserId", metadata[0].Key);
+        Assert.Equal(userId, metadata[0].Value?.ToString());
 
-        Assert.Equal("Client", metadata[1].Source);
-        Assert.Equal("UserId", metadata[1].Key);
-        Assert.Equal(userId, metadata[1].Value?.ToString());
+        Assert.Equal(EventMetadataSource.Client, metadata[1].Source);
+        Assert.Equal("RequestId", metadata[1].Key);
+        Assert.Equal(requestId, metadata[1].Value?.ToString());
 
-        Assert.Equal("Client", metadata[2].Source);
-        Assert.Equal("RequestId", metadata[2].Key);
-        Assert.Equal(requestId, metadata[2].Value?.ToString());
+        // Verify batch CorrelationId (extracted from client metadata and re-added from batch)
+        var batchCorrelationId = metadata.FirstOrDefault(m => m.Key == EventMetadataKeys.CorrelationId);
+        Assert.NotNull(batchCorrelationId);
+        Assert.Equal(EventMetadataSource.Client, batchCorrelationId.Source);
+        Assert.Equal(correlationId, batchCorrelationId.Value?.ToString());
 
         // Verify system metadata (automatically added)
-        Assert.Equal("System", metadata[3].Source);
-        Assert.Equal("Timestamp", metadata[3].Key);
-        Assert.NotNull(metadata[3].Value);
+        // EventId, BatchId, Timestamp, StreamVersion
+        var systemMetadata = metadata.Where(m => m.Source == EventMetadataSource.System).ToList();
+        Assert.Equal(4, systemMetadata.Count);
 
-        Assert.Equal("System", metadata[4].Source);
-        Assert.Equal("StreamVersion", metadata[4].Key);
-        Assert.Equal("1", metadata[4].Value?.ToString()); // First event, version 1
+        Assert.Contains(systemMetadata, m => m.Key == EventMetadataKeys.EventId);
+        Assert.Contains(systemMetadata, m => m.Key == EventMetadataKeys.BatchId);
+        Assert.Contains(systemMetadata, m => m.Key == EventMetadataKeys.Timestamp);
+
+        var streamVersionMeta = systemMetadata.First(m => m.Key == EventMetadataKeys.StreamVersion);
+        Assert.Equal("1", streamVersionMeta.Value?.ToString()); // First event, version 1
     }
 
     [Fact]

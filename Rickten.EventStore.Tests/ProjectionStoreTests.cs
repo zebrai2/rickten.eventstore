@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore.TypeMetadata;
 using Rickten.EventStore.Tests;
 using Rickten.Projector;
@@ -20,7 +21,7 @@ public class ProjectionStoreTests
     private ProjectionStore CreateStore(string dbName)
     {
         var registry = TestTypeMetadataRegistry.Create();
-        return new ProjectionStore(CreateContext(dbName), registry);
+        return new ProjectionStore(CreateContext(dbName), new WireTypeSerializer(registry));
     }
 
     [Fact]
@@ -88,7 +89,7 @@ public class ProjectionStoreTests
         var dbName = Guid.NewGuid().ToString();
         var context = CreateContext(dbName);
         var registry = TestTypeMetadataRegistry.Create();
-        var store = new ProjectionStore(context, registry);
+        var store = new ProjectionStore(context, new WireTypeSerializer(registry));
         var key = "OrderSummary3";
 
         await store.SaveProjectionAsync(key, 1, new OrderSummaryState { Count = 5 });

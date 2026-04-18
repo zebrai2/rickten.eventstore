@@ -83,6 +83,9 @@ public static class ServiceCollectionExtensions
         // Use TryAddDbContext to prevent duplicate registrations
         services.AddDbContext<EventStoreDbContext>(optionsAction);
 
+        // Register WireTypeSerializer as a scoped service
+        services.TryAddScoped<Serialization.WireTypeSerializer>();
+
         // Use TryAdd to prevent duplicate store registrations
         services.TryAddScoped<IEventStore, EventStore>();
         services.TryAddScoped<ISnapshotStore, SnapshotStore>();

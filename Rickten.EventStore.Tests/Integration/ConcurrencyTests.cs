@@ -1,6 +1,7 @@
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Rickten.EventStore.EntityFramework;
+using Rickten.EventStore.EntityFramework.Serialization;
 using Rickten.EventStore;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,7 @@ public class ConcurrencyTests : IDisposable
     }
 
     private EventStoreDbContext CreateContext() => new EventStoreDbContext(_options);
-    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry);
+    private EntityFramework.EventStore CreateEventStore() => new EntityFramework.EventStore(CreateContext(), Registry, new WireTypeSerializer(Registry));
 
     [Fact]
     public async Task OptimisticConcurrency_DetectsVersionConflict()
