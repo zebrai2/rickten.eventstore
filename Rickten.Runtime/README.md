@@ -63,22 +63,22 @@ using Rickten.Reactor;
 
 // Polls every 2 seconds
 [Reaction("MyReaction", 
-    EventTypes = new[] { "OrderPlaced" },
+    EventTypes = new[] { "Order.Placed.v1" },
     PollingIntervalMilliseconds = 2000)]
 public class MyReaction : Reaction<MyView, MyCommand>
 {
     public MyReaction(ITypeMetadataRegistry registry) : base(registry) { }
-    
+
     public override IProjection<MyView> Projection => new MyProjection();
-    
+
     protected override IEnumerable<StreamIdentifier> SelectStreams(MyView view, StreamEvent trigger)
     {
         if (trigger.Event is OrderPlaced evt)
-            yield return StreamIdentifier.Create<MyAggregate>(evt.OrderId);
+            yield return new StreamIdentifier("Order", evt.OrderId);
     }
-    
+
     protected override MyCommand BuildCommand(StreamIdentifier stream, MyView view, StreamEvent trigger)
-        => new MyCommand(stream.Id);
+        => new MyCommand(stream.Identifier);
 }
 ```
 
