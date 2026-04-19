@@ -1,7 +1,10 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Rickten.EventStore;
 
 /// <summary>
-/// A no-op implementation of ISnapshotStore that does nothing.
+/// A no-op implementation of ISnapshotStore for testing purposes.
 /// Use when snapshots are not needed but ISnapshotStore is required.
 /// </summary>
 public sealed class NoOpSnapshotStore : ISnapshotStore
