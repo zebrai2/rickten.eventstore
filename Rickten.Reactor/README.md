@@ -309,6 +309,46 @@ public sealed class MembershipDefinitionChangedReaction
 - Commands **must be idempotent** (replay may occur after partial execution)
 - Projection state is always consistent with or ahead of reaction progress
 
+## Metadata Propagation
+
+When `ReactionRunner` executes commands in response to trigger events, it automatically adds metadata to the resulting events to maintain traceability:
+
+### Automatically Added Metadata
+
+1. **CorrelationId** - Propagated from trigger event (if present)
+   - Tracks related events across aggregate boundaries
+   - Source: `Client` (even if trigger was `System`)
+
+2. **CausationId** - Set to trigger event's system `EventId`
+   - References the event that caused this reaction
+   - Source: `Client`
+
+3. **ReactionWireName** - Identifies the reaction that produced the event
+   - Format: `Reaction.{Name}.{ClassName}`
+   - Example: `"Reaction.MembershipDefinitionChanged.MembershipDefinitionChangedReaction"`
+   - Source: `Client`
+
+### Reading Reaction Metadata
+
+Use the typed extension methods from `EventMetadataExtensions`:
+
+```csharp
+// Get the reaction that produced this event
+var reactionWireName = streamEvent.Metadata.GetReactionWireName();
+// Returns: "Reaction.MembershipDefinitionChanged.MembershipDefinitionChangedReaction"
+
+// Get the trigger event that caused this
+var causationId = streamEvent.Metadata.GetCausationId();
+
+// Get the correlation ID for distributed tracing
+var correlationId = streamEvent.Metadata.GetCorrelationId();
+```
+
+This enables:
+- **Debugging**: Trace which reaction produced specific events
+- **Monitoring**: Track reaction execution patterns
+- **Auditing**: Full causation chain from trigger to result
+
 ## Design Boundaries
 
 ### Included

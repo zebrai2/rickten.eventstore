@@ -52,4 +52,12 @@ public static class EventMetadataKeys
     /// Type: long (System metadata source)
     /// </summary>
     public const string StreamVersion = "StreamVersion";
+
+    /// <summary>
+    /// The wire name of the reaction that produced this event.
+    /// Format: Reaction.{Name}.{ClassName}
+    /// Added by ReactionRunner when executing reaction-produced commands.
+    /// Type: string (Client metadata source)
+    /// </summary>
+    public const string ReactionWireName = "ReactionWireName";
 }

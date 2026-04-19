@@ -299,5 +299,15 @@ public static class EventMetadataExtensions
     {
         return metadata.FirstOrDefault(m => m.Key == key);
     }
+
+    /// <summary>
+    /// Gets the wire name of the reaction that produced this event.
+    /// ReactionWireName identifies the reaction that executed the command that produced this event.
+    /// Format: Reaction.{Name}.{ClassName}
+    /// </summary>
+    public static string? GetReactionWireName(this IReadOnlyList<EventMetadata> metadata)
+    {
+        return metadata.GetString(EventMetadataKeys.ReactionWireName);
+    }
 }
 

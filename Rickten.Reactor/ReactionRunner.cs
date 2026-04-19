@@ -205,6 +205,12 @@ public static class ReactionRunner
                     reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.CausationId, triggerEventId.Value));
                 }
 
+                // Add reaction identity metadata
+                if (reaction.WireName != null)
+                {
+                    reactionMetadata.Add(new AppendMetadata(EventMetadataKeys.ReactionWireName, reaction.WireName));
+                }
+
                 // Execute commands against each selected stream
                 foreach (var (targetStream, command) in commands)
                 {
