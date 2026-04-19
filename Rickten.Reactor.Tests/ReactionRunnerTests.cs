@@ -627,6 +627,69 @@ public class ReactionRunnerTests : IDisposable
             msg.Contains("projection is ahead of reaction checkpoint") &&
             msg.Contains("Rebuilding projection"));
     }
+
+    [Fact]
+    public async Task CatchUpAsync_AddsReactionIdentityMetadata_ToProducedEvents()
+    {
+        // Arrange
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var registry = _serviceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+        var reaction = new MembershipDefinitionChangedReaction(registry);
+        var folder = new MembershipStateFolder(registry);
+        var decider = new MembershipCommandDecider();
+
+        // Create definition
+        var defStream = new StreamIdentifier("MembershipDefinition", "def-metadata");
+        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new MembershipDefinitionChangedEvent("def-metadata", "Premium"), null)
+        });
+
+        // Register user with this definition
+        var userStream = new StreamIdentifier("User", "user-metadata");
+        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new UserRegisteredEvent("user-metadata", "user@test.com", "def-metadata"), null)
+        });
+
+        // Change the definition - this should trigger a command
+        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
+        {
+            new AppendEvent(new MembershipDefinitionChangedEvent("def-metadata", "Premium Plus"), null)
+        });
+
+        // Act
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
+        await ReactionRunner.CatchUpAsync(
+            eventStore,
+            _projectionStore,
+            reaction,
+            executor);
+
+        // Assert - verify reaction-produced events have ReactionWireName metadata
+        var membershipStream = new StreamIdentifier("Membership", "user-metadata");
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(membershipStream, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Single(events);
+        var reactionEvent = events[0];
+
+        // Verify ReactionWireName metadata is present
+        var reactionWireName = reactionEvent.Metadata.GetReactionWireName();
+        Assert.NotNull(reactionWireName);
+        Assert.Equal("Reaction.MembershipDefinitionChanged.MembershipDefinitionChangedReaction", reactionWireName);
+
+        // Also verify CorrelationId and CausationId are propagated
+        var correlationId = reactionEvent.Metadata.GetCorrelationId();
+        var causationId = reactionEvent.Metadata.GetCausationId();
+
+        // CausationId should be set to the trigger event's EventId
+        Assert.NotNull(causationId);
+    }
 }
 
 // Simple test logger for capturing log messages

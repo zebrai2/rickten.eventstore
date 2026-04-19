@@ -36,13 +36,19 @@ public abstract class Reaction<TView, TCommand>
                 $"Reaction type '{implementationType.Name}' must be decorated with [Reaction] attribute.");
         }
 
-        _reactionInfo = new ReactionInfo(reactionAttr.Name, reactionAttr.EventTypes);
+        _reactionInfo = new ReactionInfo(reactionAttr.Name, reactionAttr.EventTypes, metadata.WireName);
     }
 
     /// <summary>
     /// Gets the reaction name from the [Reaction] attribute.
     /// </summary>
     public string ReactionName => _reactionInfo.Name;
+
+    /// <summary>
+    /// Gets the wire name of this reaction.
+    /// Format: Reaction.{Name}.{ClassName}
+    /// </summary>
+    public string? WireName => _reactionInfo.WireName;
 
     /// <summary>
     /// Gets the event type filter from the [Reaction] attribute, if configured.
@@ -127,4 +133,4 @@ public abstract class Reaction<TView, TCommand>
 /// <summary>
 /// Internal record to hold reaction metadata.
 /// </summary>
-internal sealed record ReactionInfo(string Name, string[]? EventTypes);
+internal sealed record ReactionInfo(string Name, string[]? EventTypes, string? WireName);

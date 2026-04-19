@@ -180,5 +180,29 @@ public class TraceIdentityMetadataTests
         Assert.Equal(clientId, clientResult);
         Assert.Equal(systemId, systemResult);
     }
+
+    [Fact]
+    public void GetReactionWireName_Returns_Null_When_Not_Present()
+    {
+        var metadata = new List<EventMetadata>();
+
+        var result = metadata.GetReactionWireName();
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void GetReactionWireName_Returns_String_When_Present()
+    {
+        var expectedWireName = "Reaction.MembershipChanged.MembershipReaction";
+        var metadata = new List<EventMetadata>
+        {
+            new EventMetadata(EventMetadataSource.Client, EventMetadataKeys.ReactionWireName, expectedWireName)
+        };
+
+        var result = metadata.GetReactionWireName();
+
+        Assert.Equal(expectedWireName, result);
+    }
 }
 
