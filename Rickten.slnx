@@ -8,4 +8,5 @@
   <Project Path="Rickten.Projector/Rickten.Projector.csproj" />
   <Project Path="Rickten.Reactor.Tests/Rickten.Reactor.Tests.csproj" />
   <Project Path="Rickten.Reactor/Rickten.Reactor.csproj" />
+  <Project Path="Rickten.TestUtils/Rickten.TestUtils.csproj" />
 </Solution>

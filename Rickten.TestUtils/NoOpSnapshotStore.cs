@@ -1,11 +1,12 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Rickten.EventStore;
 
-namespace Rickten.EventStore;
+namespace Rickten.TestUtils;
 
 /// <summary>
 /// A no-op implementation of ISnapshotStore for testing purposes.
-/// Use when snapshots are not needed but ISnapshotStore is required.
+/// Use when snapshots are not needed in tests.
 /// </summary>
 public sealed class NoOpSnapshotStore : ISnapshotStore
 {

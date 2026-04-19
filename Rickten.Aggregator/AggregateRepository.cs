@@ -12,19 +12,19 @@ namespace Rickten.Aggregator;
 /// </remarks>
 /// <param name="eventStore">The event store.</param>
 /// <param name="folder">The state folder for this aggregate type.</param>
-/// <param name="snapshotStore">Snapshot store for loading and saving snapshots.</param>
+/// <param name="snapshotStore">Optional snapshot store for loading and saving snapshots. If null, snapshots are disabled.</param>
 public class AggregateRepository<TState>(
     IEventStore eventStore,
     IStateFolder<TState> folder,
-    ISnapshotStore snapshotStore) : IAggregateRepository<TState>
+    ISnapshotStore? snapshotStore = null) : IAggregateRepository<TState>
 {
-    private readonly IEventStore _eventStore        = eventStore    ?? throw new ArgumentNullException(nameof(eventStore));
-    private readonly IStateFolder<TState> _folder   = folder        ?? throw new ArgumentNullException(nameof(folder));
-    private readonly ISnapshotStore _snapshotStore  = snapshotStore ?? throw new ArgumentNullException(nameof(snapshotStore));
+    private readonly IEventStore _eventStore        = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+    private readonly IStateFolder<TState> _folder   = folder     ?? throw new ArgumentNullException(nameof(folder));
+    private readonly ISnapshotStore? _snapshotStore = snapshotStore;
 
     /// <summary>
     /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
-    /// Uses the configured snapshot store to start from the latest snapshot to optimize loading.
+    /// Uses the configured snapshot store (if provided) to start from the latest snapshot to optimize loading.
     /// </summary>
     /// <param name="streamIdentifier">The stream to load.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -34,7 +34,9 @@ public class AggregateRepository<TState>(
         StreamIdentifier streamIdentifier,
         CancellationToken cancellationToken = default)
     {
-        var snapshot = await _snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken);
+        var snapshot = _snapshotStore != null
+            ? await _snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken)
+            : null;
         var version  = snapshot?.StreamPointer.Version ?? 0;
         var pointer  = streamIdentifier.At(version);
 
@@ -148,6 +150,9 @@ public class AggregateRepository<TState>(
         StreamPointer finalVersion,
         CancellationToken cancellationToken = default)
     {
+        if (_snapshotStore == null)
+            return;
+
         if (_folder is not StateFolder<TState> stateFolder)
             return;
 

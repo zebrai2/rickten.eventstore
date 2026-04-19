@@ -445,9 +445,11 @@ Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
 Console.WriteLine($"Events appended: {events.Count}");
 ```
 
-### 7. Automatic Snapshots
+### 7. Automatic Snapshots (Optional)
 
-Configure snapshots declaratively on the state type with the `[Aggregate]` attribute:
+Snapshots are **optional**. If you don't need snapshots, simply omit `ISnapshotStore` from your DI registration—the repository will work fine without it.
+
+To enable snapshots, configure them declaratively on the state type with the `[Aggregate]` attribute:
 
 ```csharp
 // SnapshotInterval is configured on the STATE TYPE, not the folder
@@ -463,8 +465,14 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
     // ... event handlers ...
 }
 
-// In your DI configuration
+// In your DI configuration (snapshots enabled)
 services.AddSingleton<ISnapshotStore>(sp => /* your snapshot store */);
+services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
+services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
+services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
+services.AddTransient<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
+
+// OR without snapshots (omit ISnapshotStore)
 services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
 services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
 services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
