@@ -147,6 +147,22 @@ public class AggregateRepository<TState> : IAggregateRepository<TState>
     }
 
     /// <summary>
+    /// Validates that raw events can be successfully folded into state before persisting them.
+    /// This is a pre-append validation to ensure events won't corrupt the stream.
+    /// If validation fails, no events are persisted.
+    /// </summary>
+    /// <param name="currentState">The state before applying the events.</param>
+    /// <param name="events">The raw events to validate (before they're wrapped in StreamEvent).</param>
+    /// <returns>The new state after applying events (validation successful).</returns>
+    /// <exception cref="InvalidOperationException">Thrown when event folding fails (EnsureValid, bad When handler, etc.).</exception>
+    public TState ValidateFold(
+        TState currentState,
+        IReadOnlyList<object> events)
+    {
+        return ApplyEventsInternal(currentState, events);
+    }
+
+    /// <summary>
     /// Applies appended events to the current state by folding them through the state folder.
     /// This produces the new state after the events have been applied.
     /// </summary>

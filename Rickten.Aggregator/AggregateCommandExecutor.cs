@@ -68,16 +68,21 @@ public class AggregateCommandExecutor<TState, TCommand>
                 .ToList();
         }
 
-        // Step 4: Append events to store (persist first)
+        // Step 4: Pre-append validation - fold events to ensure they won't corrupt the stream
+        // If this throws (EnsureValid, bad When handler, etc.), no events are persisted
+        _ = _repository.ValidateFold(state, events);
+
+        // Step 5: Append events to store (persist after validation)
         // Use implicit cast from StreamIdentifier to StreamPointer (version 0), then WithVersion to current version
         var pointer = ((StreamPointer)streamIdentifier).WithVersion(currentVersion);
         var appendEvents = events.Select(e => new AppendEvent(e, filteredMetadata)).ToList();
         var appendedEvents = await _repository.AppendEventsAsync(pointer, appendEvents, cancellationToken);
 
-        // Step 5: Apply events to state (fold second)
+        // Step 6: Apply events to state (fold again, now with persisted events)
+        // We fold again to get StreamEvent context and ensure consistency
         var newState = _repository.ApplyEvents(state, appendedEvents);
 
-        // Step 6: Save snapshot if at interval boundary
+        // Step 7: Save snapshot if at interval boundary
         var finalVersion = appendedEvents.Last().StreamPointer;
         await _repository.SaveSnapshotIfNeededAsync(newState, finalVersion, cancellationToken);
 

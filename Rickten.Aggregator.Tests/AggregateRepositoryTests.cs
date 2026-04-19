@@ -542,6 +542,76 @@ public class AggregateRepositoryTests
             Assert.Same(currentState, newState);
         }
     }
+
+    [Fact]
+    public void ValidateFold_WithValidEvents_ReturnsNewState()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new InvariantTestStateFolder(registry);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+
+            // Act: Validate folding raw events
+            var currentState = new InvariantTestState(2);
+            var events = new object[]
+            {
+                new InvariantTestEvent(),
+                new InvariantTestEvent()
+            };
+            var newState = repository.ValidateFold(currentState, events);
+
+            // Assert: Validation succeeded and returned new state
+            Assert.Equal(4, newState.Count);
+        }
+    }
+
+    [Fact]
+    public void ValidateFold_WithInvalidEvents_ThrowsBeforeAppend()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+
+            // Use a folder that throws in When handler
+            var folder = new ThrowingStateFolder(registry);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+
+            // Act & Assert: Validation throws before any persistence
+            var currentState = new InvariantTestState(0);
+            var events = new object[] { new InvariantTestEvent() };
+
+            // When handler throws via reflection, so we get TargetInvocationException
+            var ex = Assert.Throws<System.Reflection.TargetInvocationException>(
+                () => repository.ValidateFold(currentState, events));
+
+            // Verify inner exception is what we expect
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("Bad When handler", ex.InnerException!.Message);
+        }
+    }
+}
+
+// Test domain for throwing folder
+public class ThrowingStateFolder : StateFolder<InvariantTestState>
+{
+    public ThrowingStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry)
+        : base(registry) { }
+
+    public override InvariantTestState InitialState() => new InvariantTestState(0);
+
+    protected InvariantTestState When(InvariantTestEvent e, InvariantTestState state)
+    {
+        throw new InvalidOperationException("Bad When handler - would corrupt stream!");
+    }
 }
 
 // Test domain for snapshot tests
