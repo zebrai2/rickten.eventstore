@@ -336,7 +336,16 @@ User/API
 │                  │                            │
 │                  v                            │
 │  ┌────────────────────────────────────────┐  │
-│  │ 4. ✅ PERSIST EVENTS FIRST ✅         │  │
+│  │ 4. ✅ VALIDATE FOLD ✅                │  │
+│  │    repository.ValidateFold()           │  │
+│  │    ↓                                   │  │
+│  │    └─ folder.Apply() for each event    │  │
+│  │       (pre-append safety check)        │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│  ┌────────────────────────────────────────┐  │
+│  │ 5. ✅ PERSIST EVENTS ✅               │  │
 │  │    repository.AppendEventsAsync()      │  │
 │  │    ↓                                   │  │
 │  │    └─ eventStore.AppendAsync()         │  │
@@ -345,16 +354,16 @@ User/API
 │                  │                            │
 │                  v                            │
 │  ┌────────────────────────────────────────┐  │
-│  │ 5. Fold + Snapshot                     │  │
+│  │ 6. Snapshot (if at interval)           │  │
 │  │    repository.SaveSnapshotIfNeeded()   │  │
 │  │    ↓                                   │  │
-│  │    ├─ folder.Apply() for each event    │  │
 │  │    ├─ Check if at snapshot interval    │  │
-│  │    └─ Save snapshot (if at interval)   │  │
+│  │    └─ Save snapshot (using validated   │  │
+│  │       state from step 4)               │  │
 │  └────────────────────────────────────────┘  │
 │                  │                            │
 │                  v                            │
-│         (state, version, events)              │
+│         (state, pointer, events)              │
 └──────────────────────────────────────────────┘
    │
    v

@@ -45,24 +45,26 @@ public interface IAggregateRepository<TState>
         IReadOnlyList<AppendEvent> events, 
         CancellationToken cancellationToken = default);
 
-    // Validate that events can be folded without errors
-    void ValidateFold(
-        TState state, 
-        IReadOnlyList<AppendEvent> events);
+    // Validate that events can be folded without errors (pre-append safety check)
+    TState ValidateFold(
+        TState currentState, 
+        IReadOnlyList<object> events);
 
     // Save snapshot if at configured interval
     Task SaveSnapshotIfNeededAsync(
-        TState newState, 
+        TState newState,
         long previousVersion, 
         StreamPointer finalPointer, 
         CancellationToken cancellationToken = default);
 }
 ```
 
-**Architecture Principle: Events First, State Second**
-- Events are the source of truth and are persisted **first**
-- State is derived from events and is folded **only when needed** (for snapshots)
-- This ensures data safety: events are safely stored before any derived state computation
+**Architecture Principle: Validate Before Persist**
+- Events are the source of truth and must be **valid before persistence**
+- **ValidateFold** ensures events can be replayed without errors (pre-append safety check)
+- Events are persisted only after validation succeeds
+- State is derived from events and folded **only when needed** (for snapshots)
+- This ensures data safety: invalid events are rejected before they corrupt the stream
 
 ### AggregateCommandExecutor<TState, TCommand>
 
@@ -71,7 +73,7 @@ Orchestrates the command execution workflow:
 ```csharp
 public class AggregateCommandExecutor<TState, TCommand>
 {
-    // Execute command: load state → decide → append events → fold + snapshot
+    // Execute command: load state → validate version → decide → validate fold → persist → snapshot
     Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
         StreamIdentifier streamIdentifier,
         TCommand command,
@@ -82,9 +84,11 @@ public class AggregateCommandExecutor<TState, TCommand>
 
 **Workflow:**
 1. Load current state from repository (events + snapshots)
-2. Execute command via decider to produce events
-3. Append events to event store (persist first)
-4. Fold events and save snapshot if at interval (derive state second)
+2. Validate expected version (if required by command)
+3. Execute command via decider to produce events
+4. **Validate fold** (ensure events can be replayed without errors)
+5. Persist events to event store (only after validation)
+6. Fold events and save snapshot if at interval (using already-validated state)
 
 ### Base Classes (Recommended)
 
@@ -491,9 +495,10 @@ using var scope = serviceProvider.CreateScope();
 var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
 var streamId = new StreamIdentifier("SessionReview", "session-1");
 
-var (state, version, events) = await executor.ExecuteAsync(
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
-    command); // Snapshot saved automatically at versions 50, 100, 150, etc.
+    command,
+    []); // Snapshot saved automatically at versions 50, 100, 150, etc.
 ```
 
 **Snapshot Behavior:**
