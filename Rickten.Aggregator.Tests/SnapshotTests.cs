@@ -229,11 +229,11 @@ public class SnapshotTests
             }
 
             // Load state with snapshot - should start from version 50 snapshot
-            var (state, version) = await AggregateRepository.LoadStateAsync(
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(
                 streamId);
 
             Assert.Equal(60, state.Count);
-            Assert.Equal(60, version);
+            Assert.Equal(60, pointer.Version);
         }
     }
 
@@ -262,11 +262,11 @@ public class SnapshotTests
             }
 
             // Load state without snapshot store - should load all events
-            var (state, version) = await AggregateRepository.LoadStateAsync(
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(
                 streamId);
 
             Assert.Equal(30, state.Count);
-            Assert.Equal(30, version);
+            Assert.Equal(30, pointer.Version);
         }
     }
 }

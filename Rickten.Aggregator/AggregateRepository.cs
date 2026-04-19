@@ -28,9 +28,9 @@ public class AggregateRepository<TState>(
     /// </summary>
     /// <param name="streamIdentifier">The stream to load.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The current state and version.</returns>
+    /// <returns>The current state and stream pointer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
-    public async Task<(TState State, long Version)> LoadStateAsync(
+    public async Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
         StreamIdentifier streamIdentifier,
         CancellationToken cancellationToken = default)
     {
@@ -52,10 +52,11 @@ public class AggregateRepository<TState>(
             ValidateEvent(streamIdentifier, streamEvent);
 
             state = _folder.Apply(state, streamEvent.Event);
+            pointer = streamEvent.StreamPointer;
             version = streamEvent.StreamPointer.Version;
         }
 
-        return (state, version);
+        return (state, pointer);
     }
 
     private static void ValidateEvent(StreamIdentifier streamIdentifier, StreamEvent streamEvent)

@@ -29,8 +29,8 @@ public class AggregateRepositoryTests
             var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Append multiple valid events
-            var pointer = new StreamPointer(streamId, 0);
-            await eventStore.AppendAsync(pointer, new[]
+            var initialPointer = new StreamPointer(streamId, 0);
+            await eventStore.AppendAsync(initialPointer, new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),
                 new AppendEvent(new InvariantTestEvent(), null),
@@ -38,11 +38,11 @@ public class AggregateRepositoryTests
             });
 
             // Act
-            var (state, version) = await AggregateRepository.LoadStateAsync(streamId);
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(streamId);
 
             // Assert
             Assert.Equal(3, state.Count);
-            Assert.Equal(3, version);
+            Assert.Equal(3, pointer.Version);
         }
     }
 
@@ -61,11 +61,11 @@ public class AggregateRepositoryTests
             var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Load state from non-existent stream
-            var (state, version) = await AggregateRepository.LoadStateAsync(streamId);
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(streamId);
 
             // Assert
             Assert.Equal(0, state.Count);
-            Assert.Equal(0, version);
+            Assert.Equal(0, pointer.Version);
         }
     }
 
@@ -85,8 +85,8 @@ public class AggregateRepositoryTests
             var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, snapshotStore);
 
             // Create 5 events
-            var pointer = new StreamPointer(streamId, 0);
-            var events = await eventStore.AppendAsync(pointer, new[]
+            var initialPointer = new StreamPointer(streamId, 0);
+            var events = await eventStore.AppendAsync(initialPointer, new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),
                 new AppendEvent(new InvariantTestEvent(), null),
@@ -107,11 +107,11 @@ public class AggregateRepositoryTests
             });
 
             // Act: Load with snapshot - should start from version 3
-            var (state, version) = await AggregateRepository.LoadStateAsync(streamId);
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(streamId);
 
             // Assert: Should have folded events 4-7 onto snapshot
             Assert.Equal(7, state.Count);
-            Assert.Equal(7, version);
+            Assert.Equal(7, pointer.Version);
         }
     }
 
@@ -133,8 +133,8 @@ public class AggregateRepositoryTests
             var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Append events normally (EventStore ensures continuity)
-            var pointer = new StreamPointer(streamId, 0);
-            var result = await eventStore.AppendAsync(pointer, new[]
+            var initialPointer = new StreamPointer(streamId, 0);
+            var result = await eventStore.AppendAsync(initialPointer, new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),
                 new AppendEvent(new InvariantTestEvent(), null),
@@ -147,9 +147,9 @@ public class AggregateRepositoryTests
             Assert.Equal(3, result[2].StreamPointer.Version);
 
             // AggregateRepository should successfully load
-            var (state, version) = await AggregateRepository.LoadStateAsync(streamId);
+            var (state, pointer) = await AggregateRepository.LoadStateAsync(streamId);
             Assert.Equal(3, state.Count);
-            Assert.Equal(3, version);
+            Assert.Equal(3, pointer.Version);
         }
     }
 
@@ -245,17 +245,16 @@ public class AggregateRepositoryTests
             await executor.ExecuteAsync(streamId, new InvariantTestCommand(), []);
 
             // Load state (version 1)
-            var (state1, version1) = await AggregateRepository.LoadStateAsync(streamId);
-            Assert.Equal(1, version1);
+            var (state1, pointer1) = await AggregateRepository.LoadStateAsync(streamId);
+            Assert.Equal(1, pointer1.Version);
 
             // Execute another command to advance to version 2
             await executor.ExecuteAsync(streamId, new InvariantTestCommand(), []);
 
             // Try to execute using stale version 1 - should fail
-            var stalePointer = new StreamPointer(streamId, version1);
             await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
             {
-                await eventStore.AppendAsync(stalePointer, new[] { new AppendEvent(new InvariantTestEvent(), null) });
+                await eventStore.AppendAsync(pointer1, new[] { new AppendEvent(new InvariantTestEvent(), null) });
             });
         }
     }
@@ -335,11 +334,11 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Append 5 events atomically
-            var pointer = ((StreamPointer)streamId) with { Version = 0 };
+            var initialPointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = Enumerable.Range(0, 5)
                 .Select(_ => new AppendEvent(new InvariantTestEvent(), null))
                 .ToList();
-            var appendedEvents = await repository.AppendEventsAsync(pointer, events);
+            var appendedEvents = await repository.AppendEventsAsync(initialPointer, events);
 
             // Assert: All events appended with sequential versions
             Assert.Equal(5, appendedEvents.Count);
@@ -349,9 +348,9 @@ public class AggregateRepositoryTests
             }
 
             // Verify by loading
-            var (state, version) = await repository.LoadStateAsync(streamId);
+            var (state, pointer) = await repository.LoadStateAsync(streamId);
             Assert.Equal(5, state.Count);
-            Assert.Equal(5, version);
+            Assert.Equal(5, pointer.Version);
         }
     }
 

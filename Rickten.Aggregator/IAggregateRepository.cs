@@ -15,9 +15,9 @@ public interface IAggregateRepository<TState>
     /// </summary>
     /// <param name="streamIdentifier">The stream to load.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The current state and version.</returns>
+    /// <returns>The current state and stream pointer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
-    Task<(TState State, long Version)> LoadStateAsync(
+    Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
         StreamIdentifier streamIdentifier,
         CancellationToken cancellationToken = default);
 

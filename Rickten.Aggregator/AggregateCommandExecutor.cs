@@ -46,35 +46,33 @@ public class AggregateCommandExecutor<TState, TCommand>
         IReadOnlyList<AppendMetadata> metadata,
         CancellationToken cancellationToken = default)
     {
-        var (state, currentVersion) = await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
-        
+        var (state, currentPointer) = await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
+
         var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata);
-        if (expectedVersion.HasValue && currentVersion != expectedVersion.Value)
+        if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
         {
             var expectedPointer = streamIdentifier.At(expectedVersion.Value);
-            var actualPointer   = streamIdentifier.At(currentVersion);
             throw new StreamVersionConflictException(
                 expectedPointer,
-                actualPointer,
-                $"Version mismatch: expected version {expectedVersion.Value}, but current version is {currentVersion}. " +
+                currentPointer,
+                $"Version mismatch: expected version {expectedVersion.Value}, but current version is {currentPointer.Version}. " +
                 $"The aggregate has changed since the decision was made.");
         }
 
         var events              = _decider.Execute(state, command);
         if (events.Count == 0)
         {
-            return (state, currentVersion,[]);
+            return (state, currentPointer.Version, []);
         }
 
         var newState            = _repository.ValidateFold(state, events);
         var filteredMetadata    = metadata.Filter(expectedVersionKey);
         var appendEvents        = events.ToAppendEvent(filteredMetadata);
-        var pointer             = streamIdentifier.At(currentVersion);
 
-        var appendedEvents      = await _repository.AppendEventsAsync(pointer, appendEvents, cancellationToken);
+        var appendedEvents      = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
         var finalVersion        = appendedEvents.LastVersion();
 
-        await _repository.SaveSnapshotIfNeededAsync(newState, currentVersion, finalVersion, cancellationToken);
+        await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalVersion, cancellationToken);
         return (newState, finalVersion.Version, appendedEvents);
     }
 
