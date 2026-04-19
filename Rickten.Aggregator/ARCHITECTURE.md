@@ -68,15 +68,16 @@ The library separates responsibilities into distinct layers:
 ├────────────────────────────────────────────────────┤
 │                                                     │
 │  IAggregateRepository<TState>                      │
-│  ├─ LoadStateAsync(streamId) → (state, version)   │
+│  ├─ LoadStateAsync(streamId) → (state, pointer)   │
 │  │   Loads from events + snapshots                 │
 │  ├─ AppendEventsAsync(pointer, events) → events   │
 │  │   Persists events to event store                │
-│  └─ SaveSnapshotIfNeededAsync(state, events)      │
+│  └─ SaveSnapshotIfNeededAsync(state, prevVer, ptr)│
 │      Folds events, saves snapshot at interval      │
 │                                                     │
 │  AggregateCommandExecutor<TState, TCommand>        │
 │  └─ ExecuteAsync(streamId, command, metadata)     │
+│      → (state, pointer, events)                    │
 │      Orchestrates: load → decide → persist → fold │
 │                                                     │
 └────────────────────────────────────────────────────┘
@@ -104,27 +105,27 @@ The library separates responsibilities into distinct layers:
 
 **Workflow:**
 ```csharp
-public async Task<(TState, long, IReadOnlyList<StreamEvent>)> ExecuteAsync(
+public async Task<(TState, StreamPointer, IReadOnlyList<StreamEvent>)> ExecuteAsync(
     StreamIdentifier streamIdentifier,
     TCommand command,
-    IReadOnlyList<AppendMetadata>? metadata = null,
+    IReadOnlyList<AppendMetadata> metadata,
     CancellationToken cancellationToken = default)
 {
     // Step 1: Load current state
-    var (state, currentVersion) = await repository.LoadStateAsync(streamIdentifier, ct);
+    var (state, currentPointer) = await repository.LoadStateAsync(streamIdentifier, ct);
 
     // Step 2: Execute command → produce events
     var events = decider.Execute(state, command);
-    if (events.Count == 0) return (state, currentVersion, []); // idempotent
+    if (events.Count == 0) return (state, currentPointer, []); // idempotent
 
     // Step 3: ✅ PERSIST EVENTS FIRST ✅
-    var pointer = ((StreamPointer)streamIdentifier).WithVersion(currentVersion);
-    var appendedEvents = await repository.AppendEventsAsync(pointer, events, ct);
+    var appendedEvents = await repository.AppendEventsAsync(currentPointer, events, ct);
 
     // Step 4: Fold events + save snapshot if at interval
-    var newState = await repository.SaveSnapshotIfNeededAsync(state, appendedEvents, ct);
+    var finalPointer = appendedEvents[^1].StreamPointer;
+    await repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, ct);
 
-    return (newState, appendedEvents.Last().StreamPointer.Version, appendedEvents);
+    return (newState, finalPointer, appendedEvents);
 }
 ```
 
@@ -225,20 +226,21 @@ public class OrderCommandDecider : CommandDecider<OrderState, OrderCommand>
 **Key Methods:**
 ```csharp
 // Load state from storage (events + optional snapshot)
-Task<(TState State, long Version)> LoadStateAsync(
+Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
     StreamIdentifier streamIdentifier,
     CancellationToken cancellationToken);
 
 // Persist events (pure I/O)
 Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
-    StreamPointer pointer,
+    StreamPointer expectedPointer,
     IReadOnlyList<AppendEvent> events,
     CancellationToken cancellationToken);
 
 // Apply events and save snapshot if at interval
-Task<TState> SaveSnapshotIfNeededAsync(
-    TState state,
-    IReadOnlyList<StreamEvent> appendedEvents,
+Task SaveSnapshotIfNeededAsync(
+    TState newState,
+    long previousVersion,
+    StreamPointer finalPointer,
     CancellationToken cancellationToken);
 ```
 
@@ -272,9 +274,10 @@ services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
 var streamId = new StreamIdentifier("Order", "order-123");
 
-var (state, version, events) = await executor.ExecuteAsync(
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
-    new ApproveOrder("order-123"));
+    new ApproveOrder("order-123"),
+    []); // metadata
 ```
 
 ## Data Flow

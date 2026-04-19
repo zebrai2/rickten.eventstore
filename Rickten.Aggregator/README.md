@@ -66,10 +66,10 @@ Orchestrates the command execution workflow:
 public class AggregateCommandExecutor<TState, TCommand>
 {
     // Execute command: load state → decide → append events → fold + snapshot
-    Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
+    Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
         StreamIdentifier streamIdentifier,
         TCommand command,
-        IReadOnlyList<AppendMetadata>? metadata = null,
+        IReadOnlyList<AppendMetadata> metadata,
         CancellationToken cancellationToken = default);
 }
 ```
@@ -437,11 +437,12 @@ var streamId = new StreamIdentifier("SessionReview", "session-1");
 
 // Execute a command (with automatic snapshots if configured on state type and snapshot store is registered)
 var command = new SessionReviewCommand.StartSession("session-1", "user-123");
-var (newState, newVersion, events) = await executor.ExecuteAsync(
+var (newState, newPointer, events) = await executor.ExecuteAsync(
     streamId,
-    command);
+    command,
+    []); // Empty metadata array
 
-Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
+Console.WriteLine($"New state: {newState.Status}, Pointer: {newPointer}");
 Console.WriteLine($"Events appended: {events.Count}");
 ```
 

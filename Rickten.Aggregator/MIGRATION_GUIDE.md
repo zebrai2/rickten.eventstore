@@ -32,7 +32,7 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 services.AddTransient<AggregateCommandExecutor<TState, TCommand>>();
 
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command, metadata);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, metadata);
 ```
 
 **Benefits:**
@@ -97,10 +97,10 @@ using var scope = serviceProvider.CreateScope();
 var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
 var streamId = new StreamIdentifier("Order", "order-123");
 
-var (state, version, events) = await executor.ExecuteAsync(
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
     command,
-    metadata); // optional
+    []); // metadata array
 ```
 
 **Notes:**
@@ -122,12 +122,13 @@ var (state, version) = await StateRunner.LoadStateAsync(
 **After:**
 ```csharp
 var repository = scope.ServiceProvider.GetRequiredService<IAggregateRepository<OrderState>>();
-var (state, version) = await repository.LoadStateAsync(streamId);
+var (state, pointer) = await repository.LoadStateAsync(streamId);
 ```
 
 **Notes:**
 - `AggregateRepository` encapsulates all loading logic (events + snapshots + validation)
 - Snapshot store is automatically used if registered in DI
+- Returns `StreamPointer` instead of `long` for type safety
 
 ### Step 4: Update Tests
 
@@ -167,13 +168,13 @@ public async Task ExecuteAsync_WithValidCommand_AppendsEvents()
     var eventStore = new InMemoryEventStore();
     var folder = new OrderStateFolder(registry);
     var decider = new OrderCommandDecider();
-    var repository = new AggregateRepository<OrderState>(eventStore, folder, null); // no snapshot store
+    var repository = new AggregateRepository<OrderState>(eventStore, folder); // snapshot store optional (null by default)
     var executor = new AggregateCommandExecutor<OrderState, OrderCommand>(repository, decider, registry);
     var streamId = new StreamIdentifier("Order", "order-123");
     var command = new PlaceOrder("order-123");
 
     // Act
-    var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+    var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 
     // Assert
     Assert.Single(events);
@@ -201,7 +202,7 @@ public async Task ExecuteAsync_WithValidCommand_AppendsEvents()
     var command = new PlaceOrder("order-123");
 
     // Act
-    var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+    var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 
     // Assert
     Assert.Single(events);
@@ -297,12 +298,12 @@ public class OrderController : ControllerBase
 
         try
         {
-            var (state, version, events) = await _executor.ExecuteAsync(
+            var (state, pointer, events) = await _executor.ExecuteAsync(
                 streamId,
                 command,
                 [new AppendMetadata("CorrelationId", request.CorrelationId)]);
 
-            return Ok(new { version, eventsCount = events.Count });
+            return Ok(new { version = pointer.Version, eventsCount = events.Count });
         }
         catch (StreamVersionConflictException)
         {
