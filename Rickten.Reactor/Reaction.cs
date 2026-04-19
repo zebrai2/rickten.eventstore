@@ -51,9 +51,9 @@ public abstract class Reaction<TView, TCommand>
     public string? WireName => _reactionInfo.WireName;
 
     /// <summary>
-    /// Gets the event type filter from the [Reaction] attribute, if configured.
+    /// Gets the event type filter from the [Reaction] attribute.
     /// </summary>
-    public string[]? EventTypeFilter => _reactionInfo.EventTypes;
+    public string[] EventTypeFilter => _reactionInfo.EventTypes;
 
     /// <summary>
     /// Gets the projection used to identify affected aggregate streams.
@@ -81,26 +81,18 @@ public abstract class Reaction<TView, TCommand>
 
     /// <summary>
     /// Determines if an event should trigger this reaction.
-    /// Default implementation checks event type against EventTypeFilter if configured.
+    /// Default implementation checks event type against EventTypeFilter.
     /// Override to add custom filtering logic.
     /// </summary>
     /// <param name="streamEvent">The event to evaluate.</param>
     /// <returns>True if the event should trigger this reaction.</returns>
     protected virtual bool ShouldProcess(StreamEvent streamEvent)
     {
-        // If no filter is configured, process all events
-        if (EventTypeFilter == null || EventTypeFilter.Length == 0)
-        {
-            return true;
-        }
-
-        // Get the wire type name from the event using [Event] attribute
         var eventType = streamEvent.Event.GetType();
         var eventAttr = eventType.GetCustomAttribute<EventStore.EventAttribute>();
 
         if (eventAttr == null)
         {
-            // No attribute - can't match filter
             return false;
         }
 
@@ -133,4 +125,4 @@ public abstract class Reaction<TView, TCommand>
 /// <summary>
 /// Internal record to hold reaction metadata.
 /// </summary>
-internal sealed record ReactionInfo(string Name, string[]? EventTypes, string? WireName);
+internal sealed record ReactionInfo(string Name, string[] EventTypes, string? WireName);

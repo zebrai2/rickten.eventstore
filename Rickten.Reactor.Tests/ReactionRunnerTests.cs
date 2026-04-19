@@ -113,7 +113,7 @@ public class MembershipDefinitionProjection : Rickten.Projector.Projection<Membe
 /// <summary>
 /// Example reaction from the spec - now with projection-based stream selection
 /// </summary>
-[Reaction("MembershipDefinitionChanged", EventTypes = new[] { "MembershipDefinition.Changed.v1" })]
+[Reaction("MembershipDefinitionChanged", ["MembershipDefinition.Changed.v1"])]
 public sealed class MembershipDefinitionChangedReaction : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>
 {
     private readonly MembershipDefinitionProjection _projection = new();
@@ -150,7 +150,7 @@ public sealed class MembershipDefinitionChangedReaction : Reaction<MembershipDef
 /// <summary>
 /// Another example reaction for user registration - single stream case
 /// </summary>
-[Reaction("UserRegisteredReaction", EventTypes = new[] { "User.Registered.v1" })]
+[Reaction("UserRegisteredReaction", ["User.Registered.v1"])]
 public sealed class UserRegisteredReaction : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>
 {
     private readonly MembershipDefinitionProjection _projection = new();

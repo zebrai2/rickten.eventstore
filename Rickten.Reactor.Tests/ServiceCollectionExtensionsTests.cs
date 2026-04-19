@@ -11,7 +11,7 @@ namespace Rickten.Reactor.Tests;
 public class ServiceCollectionExtensionsTests
 {
     // Test reaction classes
-    [Reaction("TestReaction1")]
+    [Reaction("TestReaction1", ["Test.Event.v1"])]
     public class TestReaction1 : Reaction<TestView, TestCommand>
     {
         public TestReaction1(ITypeMetadataRegistry registry) : base(registry) { }
@@ -29,7 +29,7 @@ public class ServiceCollectionExtensionsTests
         }
     }
 
-    [Reaction("TestReaction2")]
+    [Reaction("TestReaction2", ["Test.Event.v1"])]
     public class TestReaction2 : Reaction<TestView, TestCommand>
     {
         public TestReaction2(ITypeMetadataRegistry registry) : base(registry) { }
@@ -66,7 +66,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     // Abstract reaction - should not be registered
-    [Reaction("AbstractReaction")]
+    [Reaction("AbstractReaction", ["Test.Event.v1"])]
     public abstract class AbstractReaction : Reaction<TestView, TestCommand>
     {
         protected AbstractReaction(ITypeMetadataRegistry registry) : base(registry) { }

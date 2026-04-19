@@ -80,31 +80,15 @@ public static class ReactionRunner
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
-        // Reaction name is guaranteed by [Reaction] attribute (required constructor parameter)
-        // and validated during Reaction construction
-        var name = reaction.ReactionName;
+        var name                    = reaction.ReactionName;
+        var reactionCheckpoint      = await projectionStore.LoadProjectionAsync<long>($"{name}:trigger", "reaction", cancellationToken)
+                                            ?? new EventStore.Projection<long>(State: 0, GlobalPosition: 0);
+        var projectionCheckpoint    = await projectionStore.LoadProjectionAsync<TView>($"{name}:projection", "reaction", cancellationToken)
+                                            ?? new EventStore.Projection<TView>(State: reaction.Projection.InitialView(), GlobalPosition: 0);
 
-        // Load reaction checkpoint (last trigger event successfully processed)
-        // Stored as a projection with key "{reactionName}:trigger" in "reaction" namespace
-        var reactionCheckpoint = await projectionStore.LoadProjectionAsync<long>($"{name}:trigger", "reaction", cancellationToken);
-        var reactionPosition = reactionCheckpoint?.State ?? 0;
-
-        // Load reaction's private projection state
-        // Stored as a projection with key "{reactionName}:projection" in "reaction" namespace
-        var projectionCheckpoint = await projectionStore.LoadProjectionAsync<TView>($"{name}:projection", "reaction", cancellationToken);
-        TView projectionView;
-        long projectionPosition;
-
-        if (projectionCheckpoint != null)
-        {
-            projectionView = projectionCheckpoint.State;
-            projectionPosition = projectionCheckpoint.GlobalPosition;
-        }
-        else
-        {
-            projectionView = reaction.Projection.InitialView();
-            projectionPosition = 0;
-        }
+        var reactionPosition        = reactionCheckpoint.State;
+        var projectionView          = projectionCheckpoint.State;
+        var projectionPosition      = projectionCheckpoint.GlobalPosition;
 
         // Get projection filters if available for optimized event loading
         string[]? aggregateFilter = null;

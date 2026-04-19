@@ -3,24 +3,27 @@ using Rickten.EventStore.TypeMetadata;
 namespace Rickten.Reactor;
 
 /// <summary>
-/// Optional attribute for reaction metadata and event filtering.
-/// Used to optimize event queries by filtering at the store level.
+/// Attribute for reaction metadata and event filtering.
 /// </summary>
 /// <param name="name">The reaction name (used for checkpointing and identification).</param>
+/// <param name="eventTypes">The event types this reaction triggers on. Used to filter events at the store level via LoadAllAsync.</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public sealed class ReactionAttribute(string name) : Attribute, ITypeMetadata
+public sealed class ReactionAttribute(string name, string[] eventTypes) : Attribute, ITypeMetadata
 {
     /// <summary>
     /// Gets the reaction name.
     /// </summary>
-    public string Name { get; } = name;
+    public string Name { get; } = !string.IsNullOrWhiteSpace(name)
+        ? name
+        : throw new ArgumentException("Reaction name cannot be null or whitespace.", nameof(name));
 
     /// <summary>
-    /// Gets or sets the event types this reaction triggers on.
+    /// Gets the event types this reaction triggers on.
     /// Used to filter events at the store level via LoadAllAsync.
-    /// If null, all event types are processed.
     /// </summary>
-    public string[]? EventTypes { get; init; }
+    public string[] EventTypes { get; } = eventTypes?.Length > 0
+        ? eventTypes
+        : throw new ArgumentException("Event types cannot be null or empty.", nameof(eventTypes));
 
     /// <summary>
     /// Gets or sets the polling interval in milliseconds for hosted reactions.

@@ -73,7 +73,7 @@ public class TestProjection : Rickten.Projector.Projection<TestProjectionView>
 }
 
 // Test reaction with polling interval in attribute
-[Reaction("TestReaction", EventTypes = new[] { "TestAggregate.Triggered.v1" }, PollingIntervalMilliseconds = 100)]
+[Reaction("TestReaction", ["TestAggregate.Triggered.v1"], PollingIntervalMilliseconds = 100)]
 public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
 {
     private readonly TestProjection _projection;
@@ -101,7 +101,7 @@ public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
 }
 
 // Test reaction without polling interval (uses default)
-[Reaction("DefaultIntervalReaction", EventTypes = new[] { "TestAggregate.Triggered.v1" })]
+[Reaction("DefaultIntervalReaction", ["TestAggregate.Triggered.v1"])]
 public class DefaultIntervalReaction : Reaction<TestProjectionView, ProcessTestCommand>
 {
     private readonly TestProjection _projection;
