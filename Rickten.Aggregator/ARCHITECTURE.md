@@ -1,0 +1,579 @@
+# Rickten.Aggregator Architecture
+
+## Overview
+
+Rickten.Aggregator implements event-sourced aggregates following Domain-Driven Design (DDD) principles with a clean separation between domain logic and infrastructure concerns.
+
+## Core Architectural Principles
+
+### 1. Events First, State Second
+
+**Events are the source of truth.** State is derived from events.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Command Execution Flow                   │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. Load State (from events + snapshots)                │
+│     │                                                    │
+│     v                                                    │
+│  2. Execute Command → Decide Events                     │
+│     │                                                    │
+│     v                                                    │
+│  3. ✅ PERSIST EVENTS FIRST ✅                          │
+│     │  (events safely stored in event store)            │
+│     │                                                    │
+│     v                                                    │
+│  4. Fold Events → Derive State                          │
+│     │  (only if snapshot needed)                        │
+│     │                                                    │
+│     v                                                    │
+│  5. Save Snapshot (if at interval)                      │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Why This Matters:**
+- Events are immutable history - they must be persisted before any derived computation
+- If folding/snapshotting fails, events are already safe
+- State reconstruction can be retried from events
+- Snapshots are pure optimization, not source of truth
+
+### 2. Separation of Concerns
+
+The library separates responsibilities into distinct layers:
+
+```
+┌────────────────────────────────────────────────────┐
+│              Domain Layer                          │
+│  (Pure business logic - no infrastructure)         │
+├────────────────────────────────────────────────────┤
+│                                                     │
+│  IStateFolder<TState>                              │
+│  ├─ InitialState() → TState                        │
+│  └─ Apply(state, event) → TState                   │
+│     Pure function: events → state                  │
+│                                                     │
+│  ICommandDecider<TState, TCommand>                 │
+│  └─ Execute(state, command) → events[]             │
+│     Pure function: (state, command) → events       │
+│                                                     │
+└────────────────────────────────────────────────────┘
+                         │
+                         v
+┌────────────────────────────────────────────────────┐
+│         Infrastructure Layer                       │
+│  (Persistence, orchestration, snapshots)           │
+├────────────────────────────────────────────────────┤
+│                                                     │
+│  IAggregateRepository<TState>                      │
+│  ├─ LoadStateAsync(streamId) → (state, version)   │
+│  │   Loads from events + snapshots                 │
+│  ├─ AppendEventsAsync(pointer, events) → events   │
+│  │   Persists events to event store                │
+│  └─ SaveSnapshotIfNeededAsync(state, events)      │
+│      Folds events, saves snapshot at interval      │
+│                                                     │
+│  AggregateCommandExecutor<TState, TCommand>        │
+│  └─ ExecuteAsync(streamId, command, metadata)     │
+│      Orchestrates: load → decide → persist → fold │
+│                                                     │
+└────────────────────────────────────────────────────┘
+```
+
+### 3. DDD Repository Pattern
+
+`IAggregateRepository<TState>` follows the Repository pattern from Domain-Driven Design:
+
+**Responsibilities:**
+- ✅ Load aggregates from storage (events + snapshots)
+- ✅ Persist aggregate changes (events)
+- ✅ Manage snapshots for optimization
+- ✅ Validate stream integrity (version continuity)
+
+**Benefits:**
+- Domain logic (folders, deciders) has no dependency on infrastructure
+- Infrastructure concerns (event store, snapshot store) are encapsulated
+- Easy to test domain logic in isolation
+- Clear contract for aggregate persistence
+
+### 4. Command Executor Pattern
+
+`AggregateCommandExecutor<TState, TCommand>` orchestrates the command execution workflow:
+
+**Workflow:**
+```csharp
+public async Task<(TState, long, IReadOnlyList<StreamEvent>)> ExecuteAsync(
+    StreamIdentifier streamIdentifier,
+    TCommand command,
+    IReadOnlyList<AppendMetadata>? metadata = null,
+    CancellationToken cancellationToken = default)
+{
+    // Step 1: Load current state
+    var (state, currentVersion) = await repository.LoadStateAsync(streamIdentifier, ct);
+
+    // Step 2: Execute command → produce events
+    var events = decider.Execute(state, command);
+    if (events.Count == 0) return (state, currentVersion, []); // idempotent
+
+    // Step 3: ✅ PERSIST EVENTS FIRST ✅
+    var pointer = ((StreamPointer)streamIdentifier).WithVersion(currentVersion);
+    var appendedEvents = await repository.AppendEventsAsync(pointer, events, ct);
+
+    // Step 4: Fold events + save snapshot if at interval
+    var newState = await repository.SaveSnapshotIfNeededAsync(state, appendedEvents, ct);
+
+    return (newState, appendedEvents.Last().StreamPointer.Version, appendedEvents);
+}
+```
+
+**Expected Version Support:**
+- Commands can declare `ExpectedVersionKey` in `[Command]` attribute
+- Executor validates expected version **before** running decider
+- Prevents stale-read issues in CQRS systems
+- Expected version metadata is **not persisted** with events (request context only)
+
+## Component Responsibilities
+
+### StateFolder<TState>
+
+**What:** Pure state fold function (events → state)
+
+**Responsibilities:**
+- Define initial state
+- Define event handlers (`When` methods)
+- Validate event coverage (all events have handlers)
+- Provide state validation helpers
+
+**Does NOT:**
+- Access event store
+- Access snapshot store
+- Know about commands
+- Know about persistence
+
+**Example:**
+```csharp
+public class OrderStateFolder : StateFolder<OrderState>
+{
+    public OrderStateFolder(ITypeMetadataRegistry registry) : base(registry) { }
+
+    public override OrderState InitialState() => new();
+
+    protected OrderState When(OrderPlaced e, OrderState state) =>
+        state with { OrderId = e.OrderId, Status = OrderStatus.Pending };
+
+    protected OrderState When(OrderApproved e, OrderState state) =>
+        state with { Status = OrderStatus.Approved, ApprovedAt = e.Timestamp };
+}
+```
+
+### CommandDecider<TState, TCommand>
+
+**What:** Pure decision function ((state, command) → events)
+
+**Responsibilities:**
+- Validate command against current state
+- Produce events based on command + state
+- Enforce business rules
+- Handle idempotent commands
+
+**Does NOT:**
+- Access event store
+- Fold events into state
+- Know about persistence
+- Know about snapshots
+
+**Example:**
+```csharp
+public class OrderCommandDecider : CommandDecider<OrderState, OrderCommand>
+{
+    protected override void ValidateCommand(OrderState state, OrderCommand command)
+    {
+        if (command is ApproveOrder)
+            RequireEqual(state.Status, OrderStatus.Pending, "Order must be pending");
+    }
+
+    protected override IReadOnlyList<object> ExecuteCommand(OrderState state, OrderCommand command)
+    {
+        return command switch
+        {
+            PlaceOrder place => Event(new OrderPlaced(place.OrderId, DateTime.UtcNow)),
+            ApproveOrder => Event(new OrderApproved(DateTime.UtcNow)),
+            _ => NoEvents() // idempotent
+        };
+    }
+}
+```
+
+### AggregateRepository<TState>
+
+**What:** Persistence layer for aggregates following DDD Repository pattern
+
+**Responsibilities:**
+- Load state from events + snapshots
+- Validate stream integrity (version continuity, no gaps, no nulls)
+- Persist events to event store
+- Apply events to state (folding)
+- Save snapshots at configured intervals
+
+**Does NOT:**
+- Execute commands
+- Make business decisions
+- Know about command metadata filtering
+
+**Key Methods:**
+```csharp
+// Load state from storage (events + optional snapshot)
+Task<(TState State, long Version)> LoadStateAsync(
+    StreamIdentifier streamIdentifier,
+    CancellationToken cancellationToken);
+
+// Persist events (pure I/O)
+Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
+    StreamPointer pointer,
+    IReadOnlyList<AppendEvent> events,
+    CancellationToken cancellationToken);
+
+// Apply events and save snapshot if at interval
+Task<TState> SaveSnapshotIfNeededAsync(
+    TState state,
+    IReadOnlyList<StreamEvent> appendedEvents,
+    CancellationToken cancellationToken);
+```
+
+### AggregateCommandExecutor<TState, TCommand>
+
+**What:** Command execution workflow orchestrator
+
+**Responsibilities:**
+- Load current state via repository
+- Handle expected version validation (if command declares `ExpectedVersionKey`)
+- Execute command via decider
+- Filter metadata (remove expected version key before persistence)
+- Persist events via repository
+- Fold events and snapshot via repository
+- Return new state + version + events
+
+**Does NOT:**
+- Fold events itself (delegates to repository)
+- Access event/snapshot stores directly (uses repository)
+- Make business decisions (delegates to decider)
+
+**Usage:**
+```csharp
+// Configure DI
+services.AddSingleton<IStateFolder<OrderState>, OrderStateFolder>();
+services.AddSingleton<ICommandDecider<OrderState, OrderCommand>, OrderCommandDecider>();
+services.AddTransient<IAggregateRepository<OrderState>, AggregateRepository<OrderState>>();
+services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
+
+// Execute command
+var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
+var streamId = new StreamIdentifier("Order", "order-123");
+
+var (state, version, events) = await executor.ExecuteAsync(
+    streamId,
+    new ApproveOrder("order-123"));
+```
+
+## Data Flow
+
+### Command Execution Flow
+
+```
+User/API
+   │
+   │ command + metadata
+   │
+   v
+┌──────────────────────────────────────────────┐
+│     AggregateCommandExecutor                 │
+│  ┌────────────────────────────────────────┐  │
+│  │ 1. Load State                          │  │
+│  │    repository.LoadStateAsync()         │  │
+│  │    ↓                                   │  │
+│  │    ├─ Load snapshot (if exists)        │  │
+│  │    ├─ Load events after snapshot       │  │
+│  │    ├─ Validate version continuity      │  │
+│  │    └─ Fold events → state              │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│  ┌────────────────────────────────────────┐  │
+│  │ 2. Validate Expected Version (if set) │  │
+│  │    Extract from metadata               │  │
+│  │    Compare with current version        │  │
+│  │    Throw if mismatch                   │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│  ┌────────────────────────────────────────┐  │
+│  │ 3. Execute Command                     │  │
+│  │    decider.Execute(state, command)     │  │
+│  │    ↓                                   │  │
+│  │    ├─ ValidateCommand()                │  │
+│  │    └─ ExecuteCommand() → events[]      │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│  ┌────────────────────────────────────────┐  │
+│  │ 4. ✅ PERSIST EVENTS FIRST ✅         │  │
+│  │    repository.AppendEventsAsync()      │  │
+│  │    ↓                                   │  │
+│  │    └─ eventStore.AppendAsync()         │  │
+│  │       (with optimistic concurrency)    │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│  ┌────────────────────────────────────────┐  │
+│  │ 5. Fold + Snapshot                     │  │
+│  │    repository.SaveSnapshotIfNeeded()   │  │
+│  │    ↓                                   │  │
+│  │    ├─ folder.Apply() for each event    │  │
+│  │    ├─ Check if at snapshot interval    │  │
+│  │    └─ Save snapshot (if at interval)   │  │
+│  └────────────────────────────────────────┘  │
+│                  │                            │
+│                  v                            │
+│         (state, version, events)              │
+└──────────────────────────────────────────────┘
+   │
+   v
+Return to caller
+```
+
+### Load State Flow
+
+```
+┌──────────────────────────────────────┐
+│  AggregateRepository.LoadStateAsync  │
+│  ┌────────────────────────────────┐  │
+│  │ 1. Load Snapshot (if exists)   │  │
+│  │    snapshotStore?.LoadAsync()  │  │
+│  │    ↓                           │  │
+│  │    state = snapshot ?? initial │  │
+│  │    version = snapshot.Version  │  │
+│  └────────────────────────────────┘  │
+│              │                        │
+│              v                        │
+│  ┌────────────────────────────────┐  │
+│  │ 2. Load Events After Snapshot  │  │
+│  │    eventStore.ReadAsync()      │  │
+│  │    (from version+1 onwards)    │  │
+│  └────────────────────────────────┘  │
+│              │                        │
+│              v                        │
+│  ┌────────────────────────────────┐  │
+│  │ 3. Validate Stream Integrity   │  │
+│  │    ├─ Check stream IDs match   │  │
+│  │    ├─ Check versions 1,2,3...  │  │
+│  │    ├─ Check no gaps            │  │
+│  │    ├─ Check no duplicates      │  │
+│  │    └─ Check no null events     │  │
+│  └────────────────────────────────┘  │
+│              │                        │
+│              v                        │
+│  ┌────────────────────────────────┐  │
+│  │ 4. Fold Events → State         │  │
+│  │    foreach event:              │  │
+│  │      state = folder.Apply()    │  │
+│  └────────────────────────────────┘  │
+│              │                        │
+│              v                        │
+│      (state, version)                 │
+└──────────────────────────────────────┘
+```
+
+## Snapshot Strategy
+
+**Declarative Configuration:**
+```csharp
+[Aggregate("Order", SnapshotInterval = 50)]
+public record OrderState { ... }
+```
+
+**Automatic Behavior:**
+- Executor calls `repository.SaveSnapshotIfNeededAsync()` after persisting events
+- Repository checks: `if (newVersion % interval == 0) SaveSnapshot()`
+- Snapshots saved at versions: 50, 100, 150, 200, ...
+- Load operations start from latest snapshot
+- Snapshots are **optional optimization** - events are source of truth
+
+**Why Fold After Persist:**
+- Events must be safe before deriving state
+- If snapshot fails, events are already persisted
+- State can be reconstructed by replaying from events
+- Snapshots never risk data loss
+
+## Error Handling
+
+### Business Rule Violations
+```csharp
+// In CommandDecider.ValidateCommand
+protected override void ValidateCommand(OrderState state, OrderCommand command)
+{
+    if (command is ApproveOrder)
+        RequireEqual(state.Status, OrderStatus.Pending, "Order must be pending");
+    // Throws InvalidOperationException if validation fails
+}
+```
+
+### Concurrency Conflicts
+```csharp
+// In AggregateRepository.AppendEventsAsync
+await _eventStore.AppendAsync(pointer, events, cancellationToken);
+// Throws StreamVersionConflictException if version mismatch
+```
+
+### Expected Version Mismatch
+```csharp
+// In AggregateCommandExecutor.ExecuteAsync
+if (expectedVersionKey != null)
+{
+    var expectedVersion = ExtractExpectedVersion(metadata, expectedVersionKey);
+    if (currentVersion != expectedVersion)
+        throw new StreamVersionConflictException(...);
+}
+```
+
+### Stream Integrity Violations
+```csharp
+// In AggregateRepository.LoadStateAsync
+// Validates:
+- Stream identifier consistency → InvalidOperationException
+- Version continuity (1,2,3...) → InvalidOperationException
+- No gaps in versions → InvalidOperationException
+- No duplicate versions → InvalidOperationException
+- No null events → InvalidOperationException
+```
+
+## Testing Strategy
+
+### Unit Tests (Domain Layer)
+
+Test folders and deciders in isolation:
+
+```csharp
+[Fact]
+public void StateFolder_When_OrderPlaced_SetsOrderId()
+{
+    var folder = new OrderStateFolder(registry);
+    var state = folder.InitialState();
+    var @event = new OrderPlaced("order-123", DateTime.UtcNow);
+
+    var newState = folder.Apply(state, @event);
+
+    Assert.Equal("order-123", newState.OrderId);
+}
+
+[Fact]
+public void CommandDecider_ApproveOrder_RequiresPendingStatus()
+{
+    var decider = new OrderCommandDecider();
+    var state = new OrderState { Status = OrderStatus.Approved }; // wrong status
+    var command = new ApproveOrder();
+
+    var ex = Assert.Throws<InvalidOperationException>(
+        () => decider.Execute(state, command));
+    Assert.Contains("must be pending", ex.Message);
+}
+```
+
+### Integration Tests (Infrastructure Layer)
+
+Test repository and executor with real event store:
+
+```csharp
+[Fact]
+public async Task AggregateRepository_LoadStateAsync_LoadsFromSnapshot()
+{
+    // Arrange: Create snapshot + events
+    await snapshotStore.SaveAsync(...);
+    await eventStore.AppendAsync(...);
+
+    // Act
+    var (state, version) = await repository.LoadStateAsync(streamId);
+
+    // Assert
+    Assert.Equal(expectedVersion, version);
+    Assert.Equal(expectedState, state);
+}
+
+[Fact]
+public async Task AggregateCommandExecutor_ExecuteAsync_PersiststhenFolds()
+{
+    // Arrange
+    var executor = new AggregateCommandExecutor<OrderState, OrderCommand>(...);
+
+    // Act
+    var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+
+    // Assert: Events persisted
+    var loadedEvents = await eventStore.ReadAsync(...);
+    Assert.Equal(events, loadedEvents);
+
+    // Assert: State derived from events
+    var (loadedState, _) = await repository.LoadStateAsync(streamId);
+    Assert.Equal(state, loadedState);
+}
+```
+
+## Migration from Previous Architecture
+
+### Before (StateRunner static utilities)
+
+```csharp
+// Old approach
+var (state, version, events) = await StateRunner.ExecuteAsync(
+    eventStore,
+    folder,
+    decider,
+    streamId,
+    command,
+    registry,
+    snapshotStore,
+    metadata);
+```
+
+### After (DDD Repository + Executor)
+
+```csharp
+// Configure DI (once at startup)
+services.AddSingleton<IStateFolder<OrderState>, OrderStateFolder>();
+services.AddSingleton<ICommandDecider<OrderState, OrderCommand>, OrderCommandDecider>();
+services.AddTransient<IAggregateRepository<OrderState>, AggregateRepository<OrderState>>();
+services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
+
+// Execute command (in your code)
+var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
+var (state, version, events) = await executor.ExecuteAsync(streamId, command, metadata);
+```
+
+### Key Changes
+
+1. **StateRunner removed** → Replaced by `AggregateRepository` + `AggregateCommandExecutor`
+2. **Static methods** → Instance methods (DI-friendly)
+3. **Many parameters** → Dependencies injected via constructor
+4. **Unclear responsibilities** → Clear separation (repository = persistence, executor = orchestration)
+5. **Fold-then-persist** → **Persist-then-fold** (events first, state second)
+
+### Benefits
+
+- ✅ Better testability (inject mocks for repository)
+- ✅ Clearer responsibilities (DDD repository pattern)
+- ✅ Safer architecture (persist events before deriving state)
+- ✅ More idiomatic .NET (DI instead of static utilities)
+- ✅ Extensible (can override repository or executor behavior)
+
+## Summary
+
+Rickten.Aggregator provides a clean, testable architecture for event-sourced aggregates:
+
+- **Domain layer** (StateFolder, CommandDecider) is pure and infrastructure-free
+- **Infrastructure layer** (AggregateRepository) handles all persistence concerns
+- **Orchestration layer** (AggregateCommandExecutor) manages the command workflow
+- **Events are persisted first**, state derived second (safe by design)
+- **DDD Repository pattern** provides clean abstraction for aggregate persistence
+- **Automatic snapshots** via declarative configuration on state types
+- **Expected version support** for CQRS stale-read protection

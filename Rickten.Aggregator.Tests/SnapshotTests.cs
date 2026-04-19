@@ -1,3 +1,4 @@
+using Rickten.Aggregator;
 using Rickten.EventStore;
 using Rickten.EventStore.EntityFramework;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,14 +42,12 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
-            var (state, version, events) = await stateRunner.ExecuteAsync(
-                folder,
-                decider,
+            var (state, version, events) = await executor.ExecuteAsync(
                 streamId,
-                new TestCommand.Increment(),
-                registry);
+                new TestCommand.Increment());
 
             Assert.Equal(1, state.Count);
             Assert.Equal(1, version);
@@ -69,18 +68,15 @@ public class SnapshotTests
             var folder = new NoSnapshotStateFolder(registry);
             var decider = new NoSnapshotCommandDecider();
             var streamId = new StreamIdentifier("NoSnapshot", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<NoSnapshotState>(eventStore, folder, snapshotStore);
+            var executor = new AggregateCommandExecutor<NoSnapshotState, NoSnapshotCommand>(AggregateRepository, decider, registry);
 
             // Execute multiple commands
             for (int i = 0; i < 10; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new NoSnapshotCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new NoSnapshotCommand.Increment());
             }
 
             // No snapshots should be saved
@@ -102,18 +98,15 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry); // SnapshotInterval = 25
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, snapshotStore);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Execute 50 commands (should snapshot at version 25 and 50)
             for (int i = 0; i < 50; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new TestCommand.Increment());
             }
 
             // Should have snapshot at version 50
@@ -139,18 +132,15 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry); // SnapshotInterval = 25
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, snapshotStore);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Execute 26 commands (should only snapshot at version 25, not 26)
             for (int i = 0; i < 26; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new TestCommand.Increment());
             }
 
             var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -172,31 +162,24 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, snapshotStore);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Set up state at version 25
             for (int i = 0; i < 25; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new TestCommand.Increment());
             }
 
             var snapshotBefore = await snapshotStore.LoadSnapshotAsync(streamId);
             Assert.NotNull(snapshotBefore);
 
             // Execute idempotent command (returns no events)
-            await stateRunner.ExecuteAsync(
-                folder,
-                decider,
+            await executor.ExecuteAsync(
                 streamId,
-                new TestCommand.Noop(),
-                registry,
-                snapshotStore);
+                new TestCommand.Noop());
 
             // Should still be at version 25 (no new snapshot)
             var snapshotAfter = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -218,37 +201,28 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, snapshotStore);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Create 50 events (will snapshot at 25 and 50)
             for (int i = 0; i < 50; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new TestCommand.Increment());
             }
 
             // Add 10 more events after the snapshot
             for (int i = 0; i < 10; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry,
-                    snapshotStore);
+                    new TestCommand.Increment());
             }
 
             // Load state with snapshot - should start from version 50 snapshot
-            var (state, version) = await stateRunner.LoadStateAsync(
-                folder,
-                streamId,
-                snapshotStore);
+            var (state, version) = await AggregateRepository.LoadStateAsync(
+                streamId);
 
             Assert.Equal(60, state.Count);
             Assert.Equal(60, version);
@@ -267,22 +241,19 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var stateRunner = new StateRunner(eventStore);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder);
+            var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Create 30 events
             for (int i = 0; i < 30; i++)
             {
-                await stateRunner.ExecuteAsync(
-                    folder,
-                    decider,
+                await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment(),
-                    registry);
+                    new TestCommand.Increment());
             }
 
             // Load state without snapshot store - should load all events
-            var (state, version) = await stateRunner.LoadStateAsync(
-                folder,
+            var (state, version) = await AggregateRepository.LoadStateAsync(
                 streamId);
 
             Assert.Equal(30, state.Count);
