@@ -515,13 +515,15 @@ var (state, pointer, events) = await executor.ExecuteAsync(
    - `CommandDecider<TState, TCommand>`: Business logic split into:
      - `ValidateCommand`: Validate against current state
      - `ExecuteCommand`: Produce events (validation already done)
-   - `AggregateRepository<TState>`: Persistence lifecycle (load, append, snapshot)
+   - `AggregateRepository<TState>`: Persistence lifecycle (load, append, validate, snapshot)
    - `AggregateCommandExecutor<TState, TCommand>`: Command workflow orchestration
 
-2. **Persist First, Fold Second**
-   - Events are the source of truth and are persisted **first**
-   - State is derived from events and is computed **only when needed** (for snapshots or queries)
-   - This architectural principle ensures data safety: events are safely stored before any state derivation
+2. **Validate Before Persist**
+   - Events are the source of truth and must be **valid before persistence**
+   - **ValidateFold** ensures events can be replayed without errors (pre-append safety check)
+   - Events are persisted **only after validation succeeds**
+   - State is derived from events and computed **only when needed** (for snapshots)
+   - This ensures data safety: invalid events are rejected before they corrupt the stream
 
 3. **Simplicity**
    - Empty list = idempotent operation (use `NoEvents()` helper)
@@ -545,7 +547,7 @@ var (state, pointer, events) = await executor.ExecuteAsync(
 
 6. **DDD Repository Pattern**
    - `IAggregateRepository<TState>` follows Domain-Driven Design repository pattern
-   - Encapsulates all persistence concerns (load, append, snapshot)
+   - Encapsulates all persistence concerns (load, append, validate, snapshot)
    - Clean separation between domain logic (decider) and infrastructure (repository)
 
 ## Helper Methods
@@ -596,15 +598,18 @@ var (state, pointer, events) = await executor.ExecuteAsync(
 
 `AggregateCommandExecutor.ExecuteAsync` workflow:
 1. Load current state from repository (with validation)
-2. Execute command via decider to produce events
-3. Append events to event store with optimistic concurrency (persist first)
-4. Fold new events into state and save snapshot if at interval (derive state second)
-5. Return updated state, version, and appended events
+2. Validate expected version if required by command
+3. Execute command via decider to produce events
+4. Validate fold (ensure events can be replayed without errors - returns new state)
+5. Append events to event store with optimistic concurrency (only after validation)
+6. Save snapshot if at interval using the validated state
+7. Return new state, pointer, and appended events
 
 `AggregateRepository` provides:
 - `LoadStateAsync` - Load state from events + snapshots with validation
+- `ValidateFold` - Validate events can be folded without errors (pre-append safety check)
 - `AppendEventsAsync` - Persist events to event store
-- `SaveSnapshotIfNeededAsync` - Apply events and save snapshot at configured interval
+- `SaveSnapshotIfNeededAsync` - Save snapshot at configured interval using already-validated state
 
 ## Examples
 

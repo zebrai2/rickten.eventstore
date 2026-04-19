@@ -38,7 +38,7 @@ var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, me
 **Benefits:**
 - ✅ Instance-based (DI-friendly, testable)
 - ✅ Clear separation of concerns (DDD Repository pattern)
-- ✅ **Safer architecture: Persist events FIRST, derive state SECOND**
+- ✅ **Safer architecture: Validate fold BEFORE persist to prevent corrupt streams**
 - ✅ Fewer parameters (dependencies injected)
 - ✅ More extensible (override repository or executor)
 
@@ -351,6 +351,7 @@ await repository.LoadStateAsync(...);
 
 **Impact:** 
 - Events are validated (via ValidateFold) before persistence to prevent corrupt streams
+- ValidateFold returns the new state, which is used for snapshot (no re-fold)
 - Expected version check happens before decider runs (prevents wasted computation)
 - More robust error handling (fold errors caught before commit)
 
@@ -545,7 +546,7 @@ public async Task ExecuteAsync_AppendsEventsToStore()
 ### Q: Why was this change made?
 
 **A:** Three main reasons:
-1. **Safer architecture**: Persisting events before folding them ensures events (source of truth) are safe even if folding/snapshotting fails
+1. **Safer architecture**: Validating fold before persisting events prevents corrupt streams (events proven to replay correctly before commit)
 2. **Better testability**: Instance-based components are easier to mock and test than static methods
 3. **Clearer responsibilities**: DDD Repository pattern clarifies who owns what (persistence vs. orchestration vs. domain logic)
 
@@ -564,7 +565,7 @@ var decider = new OrderCommandDecider();
 var repository = new AggregateRepository<OrderState>(eventStore, folder, snapshotStore: null);
 var executor = new AggregateCommandExecutor<OrderState, OrderCommand>(repository, decider, registry);
 
-var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 ```
 
 But we **strongly recommend** using DI for better testability and following .NET best practices.
@@ -594,7 +595,7 @@ No infrastructure needed - just pure unit tests.
 
 **A:** Performance is **the same or better**:
 - Same number of I/O operations (read events, write events, optional snapshot)
-- **Persist-then-fold** is safer, not slower
+- **Validate-before-persist** is safer without performance penalty
 - DI overhead is negligible (constructor injection happens once per request)
 - Snapshots work the same way (automatic at configured intervals)
 

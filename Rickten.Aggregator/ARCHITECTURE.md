@@ -6,9 +6,9 @@ Rickten.Aggregator implements event-sourced aggregates following Domain-Driven D
 
 ## Core Architectural Principles
 
-### 1. Events First, State Second
+### 1. Validate Before Persist
 
-**Events are the source of truth.** State is derived from events.
+**Events are the source of truth and must be valid before persistence.** State is derived from events.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -26,17 +26,18 @@ Rickten.Aggregator implements event-sourced aggregates following Domain-Driven D
 │     v                                                    │
 │  4. ✅ VALIDATE FOLD (pre-append safety check) ✅       │
 │     │  (ensures events can be replayed without errors)  │
+│     │  (returns validated new state)                    │
 │     │                                                    │
 │     v                                                    │
 │  5. ✅ PERSIST EVENTS ✅                                │
 │     │  (events safely stored in event store)            │
 │     │                                                    │
 │     v                                                    │
-│  6. Fold Events → Derive State                          │
-│     │  (only if snapshot needed)                        │
+│  6. Save Snapshot (if at interval)                      │
+│     │  (using already-validated state from step 4)      │
 │     │                                                    │
 │     v                                                    │
-│  7. Save Snapshot (if at interval)                      │
+│  7. Return (state, pointer, events)                     │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -46,7 +47,7 @@ Rickten.Aggregator implements event-sourced aggregates following Domain-Driven D
 - **ValidateFold** ensures events can be replayed without errors before committing
 - If validation fails, nothing is persisted (no corrupt event streams)
 - State reconstruction is guaranteed to succeed (validated during append)
-- Snapshots are pure optimization, not source of truth
+- Snapshots use the already-validated state from ValidateFold
 
 ### 2. Separation of Concerns
 
@@ -78,15 +79,17 @@ The library separates responsibilities into distinct layers:
 │  IAggregateRepository<TState>                      │
 │  ├─ LoadStateAsync(streamId) → (state, pointer)   │
 │  │   Loads from events + snapshots                 │
+│  ├─ ValidateFold(state, events) → newState        │
+│  │   Validates events before append                │
 │  ├─ AppendEventsAsync(pointer, events) → events   │
 │  │   Persists events to event store                │
 │  └─ SaveSnapshotIfNeededAsync(state, prevVer, ptr)│
-│      Folds events, saves snapshot at interval      │
+│      Saves snapshot using validated state          │
 │                                                     │
 │  AggregateCommandExecutor<TState, TCommand>        │
 │  └─ ExecuteAsync(streamId, command, metadata)     │
 │      → (state, pointer, events)                    │
-│      Orchestrates: load → decide → persist → fold │
+│      Orchestrates: load → decide → validate → persist → snapshot │
 │                                                     │
 └────────────────────────────────────────────────────┘
 ```
@@ -229,9 +232,9 @@ public class OrderCommandDecider : CommandDecider<OrderState, OrderCommand>
 **Responsibilities:**
 - Load state from events + snapshots
 - Validate stream integrity (version continuity, no gaps, no nulls)
+- Validate fold before persist (pre-append safety check)
 - Persist events to event store
-- Apply events to state (folding)
-- Save snapshots at configured intervals
+- Save snapshots at configured intervals using validated state
 
 **Does NOT:**
 - Execute commands
@@ -245,13 +248,18 @@ Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
     StreamIdentifier streamIdentifier,
     CancellationToken cancellationToken);
 
+// Validate fold before persist (pre-append safety check)
+TState ValidateFold(
+    TState currentState,
+    IReadOnlyList<object> events);
+
 // Persist events (pure I/O)
 Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
     StreamPointer expectedPointer,
     IReadOnlyList<AppendEvent> events,
     CancellationToken cancellationToken);
 
-// Apply events and save snapshot if at interval
+// Save snapshot if at interval (using already-validated state)
 Task SaveSnapshotIfNeededAsync(
     TState newState,
     long previousVersion,
@@ -267,13 +275,14 @@ Task SaveSnapshotIfNeededAsync(
 - Load current state via repository
 - Handle expected version validation (if command declares `ExpectedVersionKey`)
 - Execute command via decider
+- Validate fold before persist (pre-append safety check)
 - Filter metadata (remove expected version key before persistence)
 - Persist events via repository
-- Fold events and snapshot via repository
-- Return new state + version + events
+- Save snapshot via repository using validated state
+- Return new state + pointer + events
 
 **Does NOT:**
-- Fold events itself (delegates to repository)
+- Validate fold (delegates to repository)
 - Access event/snapshot stores directly (uses repository)
 - Make business decisions (delegates to decider)
 
@@ -427,11 +436,12 @@ public record OrderState { ... }
 - Load operations start from latest snapshot
 - Snapshots are **optional optimization** - events are source of truth
 
-**Why Fold After Persist:**
-- Events must be safe before deriving state
-- If snapshot fails, events are already persisted
-- State can be reconstructed by replaying from events
-- Snapshots never risk data loss
+**Why Validate Before Persist:**
+- Events must be validated before persistence to prevent corrupt streams
+- ValidateFold ensures events can be replayed without errors
+- If validation fails, nothing is persisted (data safety)
+- Snapshot uses the already-validated state from ValidateFold
+- State reconstruction is guaranteed to succeed (validated during append)
 
 ## Error Handling
 
@@ -528,13 +538,13 @@ public async Task AggregateRepository_LoadStateAsync_LoadsFromSnapshot()
 }
 
 [Fact]
-public async Task AggregateCommandExecutor_ExecuteAsync_PersiststhenFolds()
+public async Task AggregateCommandExecutor_ExecuteAsync_ValidatesThenPersists()
 {
     // Arrange
     var executor = new AggregateCommandExecutor<OrderState, OrderCommand>(...);
 
     // Act
-    var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+    var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 
     // Assert: Events persisted
     var loadedEvents = await eventStore.ReadAsync(...);
@@ -574,7 +584,7 @@ services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
 
 // Execute command (in your code)
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command, metadata);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, metadata);
 ```
 
 ### Key Changes
@@ -583,13 +593,13 @@ var (state, version, events) = await executor.ExecuteAsync(streamId, command, me
 2. **Static methods** → Instance methods (DI-friendly)
 3. **Many parameters** → Dependencies injected via constructor
 4. **Unclear responsibilities** → Clear separation (repository = persistence, executor = orchestration)
-5. **Fold-then-persist** → **Persist-then-fold** (events first, state second)
+5. **Fold-then-persist** → **Validate-before-persist** (validate fold before append for data safety)
 
 ### Benefits
 
 - ✅ Better testability (inject mocks for repository)
 - ✅ Clearer responsibilities (DDD repository pattern)
-- ✅ Safer architecture (persist events before deriving state)
+- ✅ Safer architecture (validate fold before persist to prevent corrupt streams)
 - ✅ More idiomatic .NET (DI instead of static utilities)
 - ✅ Extensible (can override repository or executor behavior)
 
@@ -598,9 +608,9 @@ var (state, version, events) = await executor.ExecuteAsync(streamId, command, me
 Rickten.Aggregator provides a clean, testable architecture for event-sourced aggregates:
 
 - **Domain layer** (StateFolder, CommandDecider) is pure and infrastructure-free
-- **Infrastructure layer** (AggregateRepository) handles all persistence concerns
+- **Infrastructure layer** (AggregateRepository) handles all persistence concerns including fold validation
 - **Orchestration layer** (AggregateCommandExecutor) manages the command workflow
-- **Events are persisted first**, state derived second (safe by design)
+- **Events are validated before persistence**, ensuring stream integrity (safe by design)
 - **DDD Repository pattern** provides clean abstraction for aggregate persistence
 - **Automatic snapshots** via declarative configuration on state types
 - **Expected version support** for CQRS stale-read protection
