@@ -177,7 +177,7 @@ public sealed class EventStore(
         var loadedEvents = await _context.Events
             .Where(e => e.StreamType == streamType
                      && e.StreamIdentifier == streamIdentifier
-                     && expectedStreamVersion < e.Version)
+                     && e.Version > expectedStreamVersion)
             .OrderBy(e => e.Version)
             .ToListAsync(cancellationToken);
 
