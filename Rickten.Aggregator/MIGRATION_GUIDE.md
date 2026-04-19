@@ -347,9 +347,12 @@ await repository.LoadStateAsync(...);
 
 **Before:** Load → Decide → Fold → Persist (❌ less safe)
 
-**After:** Load → Decide → **Persist → Fold** (✅ safer - events stored first)
+**After:** Load → Validate Expected Version → Decide → **Validate Fold → Persist** → Snapshot (✅ safer - validated before persist)
 
-**Impact:** None for users (behavior is the same), but infrastructure is safer
+**Impact:** 
+- Events are validated (via ValidateFold) before persistence to prevent corrupt streams
+- Expected version check happens before decider runs (prevents wasted computation)
+- More robust error handling (fold errors caught before commit)
 
 ### 3. Snapshot store is optional via DI
 
@@ -378,7 +381,7 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 **After:**
 ```csharp
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 ```
 
 ### Pattern 2: Command with Metadata
@@ -392,7 +395,7 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 **After:**
 ```csharp
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command, metadata);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, metadata);
 ```
 
 ### Pattern 3: Command with Snapshots
@@ -410,7 +413,7 @@ services.AddSingleton<ISnapshotStore>(/* your snapshot store */);
 
 // Execute command (snapshot store automatically used)
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, []);
 ```
 
 ### Pattern 4: Expected Version Validation
@@ -432,7 +435,7 @@ public record ApproveOrder(string OrderId);
 
 var metadata = new[] { new AppendMetadata("ExpectedVersion", expectedVersion) };
 var executor = serviceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
-var (state, version, events) = await executor.ExecuteAsync(streamId, command, metadata);
+var (state, pointer, events) = await executor.ExecuteAsync(streamId, command, metadata);
 ```
 
 **Note:** Expected version handling is identical, just moved from StateRunner to AggregateCommandExecutor
@@ -486,11 +489,11 @@ public async Task ExecuteAsync_AppendsEventsToStore()
     var eventStore = new InMemoryEventStore();
     var folder = new OrderStateFolder(registry);
     var decider = new OrderCommandDecider();
-    var repository = new AggregateRepository<OrderState>(eventStore, folder, null);
+    var repository = new AggregateRepository<OrderState>(eventStore, folder);
     var executor = new AggregateCommandExecutor<OrderState, OrderCommand>(repository, decider, registry);
     var streamId = new StreamIdentifier("Order", "order-123");
 
-    var (state, version, events) = await executor.ExecuteAsync(streamId, new PlaceOrder("order-123"));
+    var (state, pointer, events) = await executor.ExecuteAsync(streamId, new PlaceOrder("order-123"), []);
 
     Assert.Single(events);
 }
@@ -514,10 +517,10 @@ public class AggregateTestHarness<TState, TCommand>
         _executor = new AggregateCommandExecutor<TState, TCommand>(repository, decider, registry);
     }
 
-    public Task<(TState, long, IReadOnlyList<StreamEvent>)> ExecuteAsync(
+    public Task<(TState, StreamPointer, IReadOnlyList<StreamEvent>)> ExecuteAsync(
         StreamIdentifier streamId,
         TCommand command,
-        IReadOnlyList<AppendMetadata>? metadata = null) =>
+        IReadOnlyList<AppendMetadata> metadata) =>
         _executor.ExecuteAsync(streamId, command, metadata);
 }
 
@@ -531,7 +534,7 @@ public async Task ExecuteAsync_AppendsEventsToStore()
         registry);
 
     var streamId = new StreamIdentifier("Order", "order-123");
-    var (state, version, events) = await harness.ExecuteAsync(streamId, new PlaceOrder("order-123"));
+    var (state, pointer, events) = await harness.ExecuteAsync(streamId, new PlaceOrder("order-123"), []);
 
     Assert.Single(events);
 }

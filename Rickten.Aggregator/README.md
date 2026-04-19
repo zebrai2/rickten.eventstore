@@ -35,20 +35,26 @@ Manages the complete persistence lifecycle for aggregates following the DDD Repo
 public interface IAggregateRepository<TState>
 {
     // Load state from events and snapshots
-    Task<(TState State, long Version)> LoadStateAsync(
+    Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
         StreamIdentifier streamIdentifier, 
         CancellationToken cancellationToken = default);
 
     // Persist events to the event store
     Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
-        StreamPointer pointer, 
+        StreamPointer expectedPointer, 
         IReadOnlyList<AppendEvent> events, 
         CancellationToken cancellationToken = default);
 
-    // Apply events and save snapshot if at interval
-    Task<TState> SaveSnapshotIfNeededAsync(
+    // Validate that events can be folded without errors
+    void ValidateFold(
         TState state, 
-        IReadOnlyList<StreamEvent> appendedEvents, 
+        IReadOnlyList<AppendEvent> events);
+
+    // Save snapshot if at configured interval
+    Task SaveSnapshotIfNeededAsync(
+        TState newState, 
+        long previousVersion, 
+        StreamPointer finalPointer, 
         CancellationToken cancellationToken = default);
 }
 ```
@@ -190,9 +196,10 @@ services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
 var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
 var streamId = new StreamIdentifier("Order", "order-1");
 
-var (state, version, events) = await executor.ExecuteAsync(
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
-    new CancelOrder("order-1"));
+    new CancelOrder("order-1"),
+    []); // No metadata needed
 ```
 
 ### Expected Version (Metadata-Based)

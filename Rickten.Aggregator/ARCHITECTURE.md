@@ -18,26 +18,34 @@ Rickten.Aggregator implements event-sourced aggregates following Domain-Driven D
 │  1. Load State (from events + snapshots)                │
 │     │                                                    │
 │     v                                                    │
-│  2. Execute Command → Decide Events                     │
+│  2. Validate Expected Version (if required)             │
 │     │                                                    │
 │     v                                                    │
-│  3. ✅ PERSIST EVENTS FIRST ✅                          │
+│  3. Execute Command → Decide Events                     │
+│     │                                                    │
+│     v                                                    │
+│  4. ✅ VALIDATE FOLD (pre-append safety check) ✅       │
+│     │  (ensures events can be replayed without errors)  │
+│     │                                                    │
+│     v                                                    │
+│  5. ✅ PERSIST EVENTS ✅                                │
 │     │  (events safely stored in event store)            │
 │     │                                                    │
 │     v                                                    │
-│  4. Fold Events → Derive State                          │
+│  6. Fold Events → Derive State                          │
 │     │  (only if snapshot needed)                        │
 │     │                                                    │
 │     v                                                    │
-│  5. Save Snapshot (if at interval)                      │
+│  7. Save Snapshot (if at interval)                      │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Why This Matters:**
-- Events are immutable history - they must be persisted before any derived computation
-- If folding/snapshotting fails, events are already safe
-- State reconstruction can be retried from events
+- Events are immutable history - validated before persistence
+- **ValidateFold** ensures events can be replayed without errors before committing
+- If validation fails, nothing is persisted (no corrupt event streams)
+- State reconstruction is guaranteed to succeed (validated during append)
 - Snapshots are pure optimization, not source of truth
 
 ### 2. Separation of Concerns
@@ -114,14 +122,21 @@ public async Task<(TState, StreamPointer, IReadOnlyList<StreamEvent>)> ExecuteAs
     // Step 1: Load current state
     var (state, currentPointer) = await repository.LoadStateAsync(streamIdentifier, ct);
 
-    // Step 2: Execute command → produce events
+    // Step 2: Validate expected version (if command declares ExpectedVersionKey)
+    if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
+        throw new StreamVersionConflictException(...);
+
+    // Step 3: Execute command → produce events
     var events = decider.Execute(state, command);
     if (events.Count == 0) return (state, currentPointer, []); // idempotent
 
-    // Step 3: ✅ PERSIST EVENTS FIRST ✅
+    // Step 4: ✅ VALIDATE FOLD (pre-append safety check) ✅
+    var newState = repository.ValidateFold(state, events);
+
+    // Step 5: ✅ PERSIST EVENTS ✅
     var appendedEvents = await repository.AppendEventsAsync(currentPointer, events, ct);
 
-    // Step 4: Fold events + save snapshot if at interval
+    // Step 6: Save snapshot if at interval
     var finalPointer = appendedEvents[^1].StreamPointer;
     await repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, ct);
 
