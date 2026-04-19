@@ -107,7 +107,7 @@ public sealed class EventStore(
         var currentVersion = await streamEvents.GetCurrentVersionAsync(
                                                     expectedStream,
                                                     cancellationToken);
-        if (currentVersion != expectedVersion.Version)
+        if (expectedVersion != currentVersion)
         {
             throw new StreamVersionConflictException(
                 expectedVersion, new StreamPointer(expectedStream, currentVersion),
@@ -177,7 +177,7 @@ public sealed class EventStore(
         var loadedEvents = await _context.Events
             .Where(e => e.StreamType == streamType
                      && e.StreamIdentifier == streamIdentifier
-                     && e.Version > expectedStreamVersion)
+                     && expectedStreamVersion < e.Version)
             .OrderBy(e => e.Version)
             .ToListAsync(cancellationToken);
 

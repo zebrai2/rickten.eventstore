@@ -51,7 +51,7 @@ public class AggregateCommandExecutor<TState, TCommand>
         var (state, currentPointer) = await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
 
         var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata);
-        if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
+        if (expectedVersion.HasValue && currentPointer != expectedVersion.Value)
         {
             var expectedPointer = streamIdentifier.At(expectedVersion.Value);
             throw new StreamVersionConflictException(
