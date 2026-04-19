@@ -82,7 +82,7 @@ public class EventMetadataExtensionsTests
 
         var result = metadata.GetDateTime("Timestamp");
         Assert.NotNull(result);
-        Assert.Equal(dateTime, result.Value);
+        Assert.Equal(dateTime, result!.Value);
     }
 
     [Fact]

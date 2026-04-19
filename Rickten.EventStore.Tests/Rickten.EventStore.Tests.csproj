@@ -24,6 +24,7 @@
     <ProjectReference Include="..\Rickten.EventStore.EntityFramework\Rickten.EventStore.EntityFramework.csproj" />
     <ProjectReference Include="..\Rickten.Aggregator\Rickten.Aggregator.csproj" />
     <ProjectReference Include="..\Rickten.Projector\Rickten.Projector.csproj" />
+    <ProjectReference Include="..\Rickten.TestUtils\Rickten.TestUtils.csproj" />
   </ItemGroup>
 
 </Project>

@@ -143,13 +143,13 @@ public class TraceIdentityBugFixTests
 
         var eventId = loadedEvent.Metadata.GetEventId();
         Assert.NotNull(eventId);
-        Assert.NotEqual(spoofedEventId, eventId.Value); // Should be different from spoofed value
+        Assert.NotEqual(spoofedEventId, eventId!.Value); // Should be different from spoofed value
 
         // Verify the system EventId exists and is different
         var systemEventId = loadedEvent.Metadata.GetSystemEventId();
         Assert.NotNull(systemEventId);
-        Assert.NotEqual(spoofedEventId, systemEventId.Value);
-        Assert.Equal(eventId.Value, systemEventId.Value); // GetEventId == GetSystemEventId
+        Assert.NotEqual(spoofedEventId, systemEventId!.Value);
+        Assert.Equal(eventId!.Value, systemEventId!.Value); // GetEventId == GetSystemEventId
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class TraceIdentityBugFixTests
 
         var systemEventId = loadedEvent.Metadata.GetSystemEventId();
         Assert.NotNull(systemEventId);
-        Assert.NotEqual(clientEventId, systemEventId.Value);
+        Assert.NotEqual(clientEventId, systemEventId!.Value);
 
         // Verify both client and system EventIds exist in metadata
         var allEventIds = loadedEvent.Metadata
@@ -194,6 +194,6 @@ public class TraceIdentityBugFixTests
         }
 
         Assert.Contains(allEventIds, m => m.Source == EventMetadataSource.Client && GetGuidValue(m.Value) == clientEventId);
-        Assert.Contains(allEventIds, m => m.Source == EventMetadataSource.System && GetGuidValue(m.Value) == systemEventId.Value);
+        Assert.Contains(allEventIds, m => m.Source == EventMetadataSource.System && GetGuidValue(m.Value) == systemEventId!.Value);
     }
 }

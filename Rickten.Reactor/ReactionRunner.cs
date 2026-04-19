@@ -57,10 +57,7 @@ public static class ReactionRunner
     /// <param name="eventStore">The event store to load events from.</param>
     /// <param name="projectionStore">The projection store for managing checkpoints (reactions use "reaction" namespace).</param>
     /// <param name="reaction">The reaction to execute. The reaction owns its projection via the <see cref="Reaction{TView,TCommand}.Projection"/> property.</param>
-    /// <param name="folder">The state folder for the target aggregate type.</param>
-    /// <param name="decider">The command decider for the target aggregate type.</param>
-    /// <param name="registry">The type metadata registry for resolving event and aggregate metadata.</param>
-    /// <param name="snapshotStore">Optional snapshot store for target aggregate optimization.</param>
+    /// <param name="executor">The aggregate command executor for executing commands against target aggregates. The executor is configured with folder, decider, registry, and snapshot store for the target aggregate type.</param>
     /// <param name="reactionName">The name to use for storing the reaction checkpoints (defaults to reaction's name from [Reaction] attribute).</param>
     /// <param name="logger">Optional logger for diagnostic information. Recommended for production to detect checkpoint drift and rebuild scenarios.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -81,10 +78,7 @@ public static class ReactionRunner
         IEventStore eventStore,
         IProjectionStore projectionStore,
         Reaction<TView, TCommand> reaction,
-        IStateFolder<TState> folder,
-        ICommandDecider<TState, TCommand> decider,
-        EventStore.TypeMetadata.ITypeMetadataRegistry registry,
-        ISnapshotStore? snapshotStore = null,
+        AggregateCommandExecutor<TState, TCommand> executor,
         string? reactionName = null,
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
@@ -214,15 +208,10 @@ public static class ReactionRunner
                 // Execute commands against each selected stream
                 foreach (var (targetStream, command) in commands)
                 {
-                    await StateRunner.ExecuteAsync(
-                        eventStore,
-                        folder,
-                        decider,
+                    await executor.ExecuteAsync(
                         targetStream,
                         command,
-                        registry,
-                        snapshotStore,
-                        metadata: reactionMetadata,
+                        reactionMetadata,
                         cancellationToken);
                 }
 

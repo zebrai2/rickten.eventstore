@@ -11,7 +11,7 @@ using Xunit;
 namespace Rickten.Aggregator.Tests;
 
 /// <summary>
-/// Tests for trace identity metadata propagation through StateRunner.
+/// Tests for trace identity metadata propagation through AggregateCommandExecutor.
 /// </summary>
 public class TraceIdentityAggregatorTests : IDisposable
 {
@@ -101,6 +101,8 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p1");
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         var providedCorrelationId = Guid.NewGuid();
         var metadata = new List<AppendMetadata>
@@ -108,13 +110,9 @@ public class TraceIdentityAggregatorTests : IDisposable
             new AppendMetadata(EventMetadataKeys.CorrelationId, providedCorrelationId)
         };
 
-        var result = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            decider,
+        var result = await executor.ExecuteAsync(
             streamId,
             new CreateProduct("Widget", 10m),
-            registry,
             metadata: metadata);
 
         Assert.Single(result.Events);
@@ -130,6 +128,8 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p2");
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         var providedCausationId = Guid.NewGuid();
         var metadata = new List<AppendMetadata>
@@ -137,13 +137,9 @@ public class TraceIdentityAggregatorTests : IDisposable
             new AppendMetadata(EventMetadataKeys.CausationId, providedCausationId)
         };
 
-        var result = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            decider,
+        var result = await executor.ExecuteAsync(
             streamId,
             new CreateProduct("Widget", 10m),
-            registry,
             metadata: metadata);
 
         Assert.Single(result.Events);
@@ -161,14 +157,13 @@ public class TraceIdentityAggregatorTests : IDisposable
         // Create a decider that produces multiple events
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p3");
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, multiEventDecider, registry);
 
-        var result = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            multiEventDecider,
+        var result = await executor.ExecuteAsync(
             streamId,
             new CreateProduct("Widget", 10m),
-            registry);
+            metadata: []);
 
         Assert.Equal(2, result.Events.Count);
 
@@ -188,14 +183,13 @@ public class TraceIdentityAggregatorTests : IDisposable
 
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p4");
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, multiEventDecider, registry);
 
-        var result = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            multiEventDecider,
+        var result = await executor.ExecuteAsync(
             streamId,
             new CreateProduct("Widget", 10m),
-            registry);
+            metadata: []);
 
         Assert.Equal(2, result.Events.Count);
 
@@ -215,25 +209,22 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p5");
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor1 = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         // First command execution
-        var result1 = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            decider,
+        var result1 = await executor1.ExecuteAsync(
             streamId,
             new CreateProduct("Widget", 10m),
-            registry);
+            metadata: []);
 
         // Second command execution
         var changePriceDecider = new ChangePriceDecider();
-        var result2 = await StateRunner.ExecuteAsync(
-            eventStore,
-            folder,
-            changePriceDecider,
+        var executor2 = new AggregateCommandExecutor<ProductState, ChangePrice>(AggregateRepository, changePriceDecider, registry);
+        var result2 = await executor2.ExecuteAsync(
             streamId,
             new ChangePrice(15m),
-            registry);
+            metadata: []);
 
         var batchId1 = result1.Events[0].Metadata.GetBatchId();
         var batchId2 = result2.Events[0].Metadata.GetBatchId();

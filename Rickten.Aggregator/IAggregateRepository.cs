@@ -1,0 +1,62 @@
+using Rickten.EventStore;
+
+namespace Rickten.Aggregator;
+
+/// <summary>
+/// Repository for loading and persisting aggregate state, following the DDD Repository pattern.
+/// Handles event stream loading, state folding, event persistence, and snapshot management.
+/// </summary>
+/// <typeparam name="TState">The aggregate state type.</typeparam>
+public interface IAggregateRepository<TState>
+{
+    /// <summary>
+    /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
+    /// Uses the configured snapshot store to start from the latest snapshot to optimize loading.
+    /// </summary>
+    /// <param name="streamIdentifier">The stream to load.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The current state and stream pointer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when stream has gaps, ordering issues, or duplicate versions.</exception>
+    Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
+        StreamIdentifier streamIdentifier,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Appends events to the event store with optimistic concurrency control.
+    /// </summary>
+    /// <param name="expectedVersion">The expected current stream version for optimistic concurrency.</param>
+    /// <param name="events">The events to append to the stream.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The appended events with their assigned stream pointers and global positions.</returns>
+    /// <exception cref="StreamVersionConflictException">Thrown when the expected version does not match the actual stream version.</exception>
+    Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
+        StreamPointer expectedVersion,
+        IReadOnlyList<AppendEvent> events,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates that raw events can be successfully folded into state before persisting them.
+    /// This is a pre-append validation to ensure events won't corrupt the stream.
+    /// If validation fails, no events are persisted.
+    /// </summary>
+    /// <param name="currentState">The state before applying the events.</param>
+    /// <param name="events">The raw events to validate (before they're wrapped in StreamEvent).</param>
+    /// <returns>The new state after applying events (validation successful).</returns>
+    /// <exception cref="InvalidOperationException">Thrown when event folding fails (EnsureValid, bad When handler, etc.).</exception>
+    TState ValidateFold(
+        TState currentState,
+        IReadOnlyList<object> events);
+
+    /// <summary>
+    /// Saves a snapshot if the snapshot interval is configured and we crossed or reached an interval boundary.
+    /// </summary>
+    /// <param name="newState">The state to snapshot.</param>
+    /// <param name="previousVersion">The version before appending events.</param>
+    /// <param name="finalVersion">The stream pointer after appending events.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task SaveSnapshotIfNeededAsync(
+        TState newState,
+        long previousVersion,
+        StreamPointer finalVersion,
+        CancellationToken cancellationToken = default);
+}

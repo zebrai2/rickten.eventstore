@@ -289,13 +289,13 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         var lastPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Assert
         Assert.True(lastPosition > 0);
@@ -354,13 +354,13 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // First catch-up
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         var firstPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Add another definition change
         await eventStore.AppendAsync(new StreamPointer(defStream, 2), new List<AppendEvent>
@@ -373,9 +373,7 @@ public class ReactionRunnerTests : IDisposable
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Assert
         Assert.True(secondPosition > firstPosition);
@@ -422,13 +420,13 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act - MembershipDefinitionChangedReaction only triggers on MembershipDefinition.Changed events
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         var lastPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Assert - Two definition changes occurred, but only the second one had a registered user
         // First definition change: no memberships yet (0 commands)
@@ -469,21 +467,19 @@ public class ReactionRunnerTests : IDisposable
         });
 
         // Act - run both reactions
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         var pos1 = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction1,
-            folder,
-            decider,
-            registry);
+            executor);
 
         var pos2 = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction2,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Assert - both should have processed their respective events
         var checkpoint1 = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
@@ -563,13 +559,13 @@ public class ReactionRunnerTests : IDisposable
         await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:projection", allEventsPosition, fullView, "reaction");
 
         // Act - catch up should rebuild projection to reaction position (1), then process triggers 2-3
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         var finalPosition = await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry);
+            executor);
 
         // Assert
         Assert.True(finalPosition > firstTriggerPosition);
@@ -617,13 +613,13 @@ public class ReactionRunnerTests : IDisposable
             new MembershipDefinitionView(new Dictionary<string, List<string>>()), "reaction");
 
         // Act
+        var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
+        var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
         await ReactionRunner.CatchUpAsync(
             eventStore,
             _projectionStore,
             reaction,
-            folder,
-            decider,
-            registry,
+            executor,
             logger: logger);
 
         // Assert - verify warning was logged

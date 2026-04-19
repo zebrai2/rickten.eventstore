@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Rickten.EventStore;
 
 /// <summary>
@@ -18,4 +20,12 @@ public sealed record AppendMetadata(
     {
         return Key == EventMetadataKeys.CorrelationId;
     }
+}
+
+public static class  AppendMetadataExtensions
+{
+    public static IReadOnlyList<AppendMetadata> Filter(this IReadOnlyList<AppendMetadata> metadata, string? filter)
+        => string.IsNullOrWhiteSpace(filter) 
+                ? metadata 
+                : [.. metadata.Where(m => !string.Equals(m.Key, filter, StringComparison.Ordinal))];
 }

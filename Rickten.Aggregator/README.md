@@ -1,6 +1,6 @@
 # Rickten.Aggregator
 
-A lightweight library for implementing event-sourced aggregates with a clean separation between state folding and command decision-making. Features strict-by-default validation with `[Aggregate]` and `[Command]` attributes.
+A lightweight library for implementing event-sourced aggregates with a clean separation between state folding and command decision-making. Features strict-by-default validation with `[Aggregate]` and `[Command]` attributes, and a DDD Repository pattern for aggregate persistence.
 
 ## Core Concepts
 
@@ -27,6 +27,70 @@ public interface ICommandDecider<TState, TCommand>
 }
 ```
 
+### IAggregateRepository<TState>
+
+Manages the complete persistence lifecycle for aggregates following the DDD Repository pattern:
+
+```csharp
+public interface IAggregateRepository<TState>
+{
+    // Load state from events and snapshots
+    Task<(TState State, StreamPointer Pointer)> LoadStateAsync(
+        StreamIdentifier streamIdentifier, 
+        CancellationToken cancellationToken = default);
+
+    // Persist events to the event store
+    Task<IReadOnlyList<StreamEvent>> AppendEventsAsync(
+        StreamPointer expectedPointer, 
+        IReadOnlyList<AppendEvent> events, 
+        CancellationToken cancellationToken = default);
+
+    // Validate that events can be folded without errors (pre-append safety check)
+    TState ValidateFold(
+        TState currentState, 
+        IReadOnlyList<object> events);
+
+    // Save snapshot if at configured interval
+    Task SaveSnapshotIfNeededAsync(
+        TState newState,
+        long previousVersion, 
+        StreamPointer finalPointer, 
+        CancellationToken cancellationToken = default);
+}
+```
+
+**Architecture Principle: Validate Before Persist**
+- Events are the source of truth and must be **valid before persistence**
+- **ValidateFold** runs for every command that produces events (mandatory safety check)
+- ValidateFold ensures events can be replayed without errors before append
+- Events are persisted only after validation succeeds
+- The validated state from ValidateFold is used for the command result and optional snapshots
+- This ensures data safety: invalid events are rejected before they corrupt the stream
+
+### AggregateCommandExecutor<TState, TCommand>
+
+Orchestrates the command execution workflow:
+
+```csharp
+public class AggregateCommandExecutor<TState, TCommand>
+{
+    // Execute command: load state → validate version → decide → validate fold → persist → snapshot
+    Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
+        StreamIdentifier streamIdentifier,
+        TCommand command,
+        IReadOnlyList<AppendMetadata> metadata,
+        CancellationToken cancellationToken = default);
+}
+```
+
+**Workflow:**
+1. Load current state from repository (events + snapshots)
+2. Validate expected version (if required by command)
+3. Execute command via decider to produce events
+4. **Validate fold** (ensure events can be replayed without errors - returns new state)
+5. Persist events to event store (only after validation)
+6. Save snapshot if at interval (using the validated state from step 4)
+
 ### Base Classes (Recommended)
 
 **StateFolder<TState>** - Abstract base class that:
@@ -46,21 +110,6 @@ public interface ICommandDecider<TState, TCommand>
 - Provides helper methods: `Event()`, `NoEvents()`, `Events()`, `Require()`, `RequireEqual()`, `RequireNotNull()`
 - Provides **protected** `CreateStreamId(identifier)` helper for stream identifier creation within decider implementations
 - Clean `ValidateCommand()` and `ExecuteCommand()` methods to override
-
-### StateRunner
-
-Utilities for loading state and executing commands:
-
-```csharp
-public static class StateRunner
-{
-    // Load events from stream, validate ordering/completeness, fold into state
-    Task<(TState State, long Version)> LoadStateAsync<TState>(...);
-
-    // Execute command against latest state or expected version (based on command's ExpectedVersionKey)
-    Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync<TState, TCommand>(...);
-}
-```
 
 ## Attributes
 
@@ -101,20 +150,20 @@ Configure automatic snapshots by setting the `SnapshotInterval` on the state typ
 [Aggregate("SessionReview", SnapshotInterval = 50)]
 public sealed record SessionReviewState
 {
-    // Automatically snapshots every 50 events when using StateRunner
+    // Automatically snapshots every 50 events when using AggregateCommandExecutor
     // ...
 }
 ```
 
 When `SnapshotInterval` > 0:
-- `StateRunner.ExecuteAsync` automatically saves snapshots at the configured interval when you provide a `snapshotStore`
-- `StateRunner.LoadStateAsync` automatically loads from the latest snapshot when you provide a `snapshotStore`, reducing event replay
+- `AggregateCommandExecutor.ExecuteAsync` automatically saves snapshots when append crosses interval boundary (when a `snapshotStore` is registered)
+- `AggregateRepository.LoadStateAsync` automatically loads from the latest snapshot when a `snapshotStore` is registered, reducing event replay
 
 This provides a complete optimization path for aggregates with long event histories.
 
 ### [Command]
 
-**Required** for commands executed through StateRunner:
+**Required** for commands executed through AggregateCommandExecutor:
 
 ```csharp
 [Command("SessionReview", Name = "Start Session", Description = "Starts a new review session")]
@@ -142,16 +191,20 @@ By default, commands execute against the current aggregate stream version at exe
 [Command("Order")]
 public sealed record CancelOrder(string OrderId);
 
-var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
+// Configure services
+services.AddSingleton<IStateFolder<OrderState>, OrderStateFolder>();
+services.AddSingleton<ICommandDecider<OrderState, OrderCommand>, OrderCommandDecider>();
+services.AddTransient<IAggregateRepository<OrderState>, AggregateRepository<OrderState>>();
+services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
 
 // Execute against latest state
-await StateRunner.ExecuteAsync(
-    eventStore,
-    folder,
-    decider,
+var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
+var streamId = new StreamIdentifier("Order", "order-1");
+
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
     new CancelOrder("order-1"),
-    registry);
+    []); // No metadata needed
 ```
 
 ### Expected Version (Metadata-Based)
@@ -162,19 +215,16 @@ For CQRS command handling where the user's decision was based on a specific read
 [Command("Order", ExpectedVersionKey = "ExpectedVersion")]
 public sealed record ApproveOrder(string OrderId);
 
-var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
-
 // User observed version 5 from read model
 var order = await readModel.GetOrder("order-1"); // returns version 5
 
+var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
+var streamId = new StreamIdentifier("Order", "order-1");
+
 // Command will only execute if stream is still at version 5
-var result = await StateRunner.ExecuteAsync(
-    eventStore,
-    folder,
-    decider,
+var result = await executor.ExecuteAsync(
     streamId,
     new ApproveOrder("order-1"),
-    registry,
     metadata: [
         new AppendMetadata("ExpectedVersion", order.Version),
         new AppendMetadata("CorrelationId", correlationId)
@@ -185,7 +235,7 @@ var result = await StateRunner.ExecuteAsync(
 
 1. Command declares `ExpectedVersionKey = "ExpectedVersion"` in its `[Command]` attribute
 2. Caller passes the expected version in metadata using the same key
-3. `StateRunner` extracts the expected version from metadata
+3. `AggregateCommandExecutor` extracts the expected version from metadata
 4. If stream version doesn't match, `StreamVersionConflictException` is thrown **before** the command decider runs
 5. The expected version metadata is **not persisted** with events
 
@@ -194,7 +244,7 @@ var result = await StateRunner.ExecuteAsync(
 - Expected version is request context, not command data
 - Commands remain simple and focused on business intent
 - The command payload does not carry expected version; callers provide it as metadata when executing that command
-- Expected version metadata is consumed by StateRunner and not persisted with events
+- Expected version metadata is consumed by AggregateCommandExecutor and not persisted with events
 
 ### Expected Version Behavior
 
@@ -383,35 +433,36 @@ public sealed class SessionReviewCommandDecider : CommandDecider<SessionReviewSt
 ### 6. Usage
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
+
+// Configure services (typically in your startup/program.cs)
+services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
+services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
+services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
+services.AddTransient<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
+
+// Execute commands
 using var scope = serviceProvider.CreateScope();
 
-var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
-var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>(); // optional
-var folder = new SessionReviewStateFolder(registry);
-var decider = new SessionReviewCommandDecider();
-
-// Create stream identifier directly - CreateStreamId is a protected helper
+var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
 var streamId = new StreamIdentifier("SessionReview", "session-1");
 
-// Execute a command (with automatic snapshots if configured on state type)
+// Execute a command (with automatic snapshots if configured on state type and snapshot store is registered)
 var command = new SessionReviewCommand.StartSession("session-1", "user-123");
-var (newState, newVersion, events) = await StateRunner.ExecuteAsync(
-    eventStore,
-    folder,
-    decider,
+var (newState, newPointer, events) = await executor.ExecuteAsync(
     streamId,
     command,
-    registry,
-    snapshotStore); // Optional: enables automatic snapshots
+    []); // Empty metadata array
 
-Console.WriteLine($"New state: {newState.Status}, Version: {newVersion}");
+Console.WriteLine($"New state: {newState.Status}, Pointer: {newPointer}");
 Console.WriteLine($"Events appended: {events.Count}");
 ```
 
-### 7. Automatic Snapshots
+### 7. Automatic Snapshots (Optional)
 
-Configure snapshots declaratively on the state type with the `[Aggregate]` attribute:
+Snapshots are **optional**. If you don't need snapshots, simply omit `ISnapshotStore` from your DI registration—the repository will work fine without it.
+
+To enable snapshots, configure them declaratively on the state type with the `[Aggregate]` attribute:
 
 ```csharp
 // SnapshotInterval is configured on the STATE TYPE, not the folder
@@ -427,29 +478,36 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
     // ... event handlers ...
 }
 
+// In your DI configuration (snapshots enabled)
+services.AddSingleton<ISnapshotStore>(sp => /* your snapshot store */);
+services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
+services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
+services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
+services.AddTransient<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
+
+// OR without snapshots (omit ISnapshotStore)
+services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
+services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
+services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
+services.AddTransient<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
+
 // In your code
 using var scope = serviceProvider.CreateScope();
-var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
-var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-var folder = new SessionReviewStateFolder(registry);
-var decider = new SessionReviewCommandDecider();
+var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
 var streamId = new StreamIdentifier("SessionReview", "session-1");
 
-var (state, version, events) = await StateRunner.ExecuteAsync(
-    eventStore,
-    folder,
-    decider,
+var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
     command,
-    registry,
-    snapshotStore); // Snapshot saved automatically at versions 50, 100, 150, etc.
+    []); // Snapshot saved automatically when append crosses/lands on interval boundary
 ```
 
 **Snapshot Behavior:**
 - `SnapshotInterval = 0` (default) - No automatic snapshots
-- `SnapshotInterval > 0` - Snapshots saved every N events
-- Snapshots only saved when `snapshotStore` parameter is provided
+- `SnapshotInterval > 0` - Snapshot saved when append crosses or lands on interval boundary
+- Snapshot is saved at the **final appended pointer** (not necessarily exact interval version)
+- Example: interval=50, append from v49→v51 saves snapshot at v51 (crossed boundary)
+- Snapshots only saved when `ISnapshotStore` is registered in DI
 - Idempotent commands (no events) don't trigger snapshots
 - Exposed via `StateFolder<TState>.SnapshotInterval` property
 
@@ -460,27 +518,41 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
    - `CommandDecider<TState, TCommand>`: Business logic split into:
      - `ValidateCommand`: Validate against current state
      - `ExecuteCommand`: Produce events (validation already done)
-   - `StateRunner`: Orchestration (load, decide, append, fold)
+   - `AggregateRepository<TState>`: Persistence lifecycle (load, append, validate, snapshot)
+   - `AggregateCommandExecutor<TState, TCommand>`: Command workflow orchestration
 
-2. **Simplicity**
+2. **Validate Before Persist**
+   - Events are the source of truth and must be **valid before persistence**
+   - **ValidateFold** runs for every command that produces events (mandatory safety check)
+   - ValidateFold ensures events can be replayed without errors before append
+   - Events are persisted **only after validation succeeds**
+   - The validated state is used for command results and optional snapshots
+   - This ensures data safety: invalid events are rejected before they corrupt the stream
+
+3. **Simplicity**
    - Empty list = idempotent operation (use `NoEvents()` helper)
    - Single event = use `Event(@event)` helper
    - Multiple events = use `Events(event1, event2)` helper
    - Exception = business rule violation
    - Base classes handle common patterns
 
-3. **Validation**
+4. **Validation**
    - `[Aggregate]` attribute required on state types (not on folder or decider implementations)
    - Commands validated against aggregate (via `[Command]` attribute)
    - Events validated against aggregate (via `[Event]` attribute)
    - Event coverage validated at construction: all events must have `When()` handlers
    - Clear error messages guide developers
 
-4. **Type Safety**
-   - `StreamEvent` provides full event context in StateRunner (pointer, metadata)
+5. **Type Safety**
+   - `StreamEvent` provides full event context in AggregateRepository (pointer, metadata)
    - `IStateFolder.Apply()` works with unwrapped event objects
    - `[Event]` and `[Command]` attributes for proper classification
    - Aggregate boundaries enforced at runtime
+
+6. **DDD Repository Pattern**
+   - `IAggregateRepository<TState>` follows Domain-Driven Design repository pattern
+   - Encapsulates all persistence concerns (load, append, validate, snapshot)
+   - Clean separation between domain logic (decider) and infrastructure (repository)
 
 ## Helper Methods
 
@@ -519,7 +591,7 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 
 ## Stream Validation
 
-`StateRunner.LoadStateAsync` validates:
+`AggregateRepository.LoadStateAsync` validates:
 - ✅ Stream identifier consistency
 - ✅ Sequential version numbering (1, 2, 3...)
 - ✅ No gaps in versions
@@ -528,12 +600,20 @@ var (state, version, events) = await StateRunner.ExecuteAsync(
 
 ## Integration with Rickten.EventStore
 
-`StateRunner.ExecuteAsync` handles:
-1. Load current state from event store (with validation)
-2. Execute command to get events
-3. Append events with optimistic concurrency
-4. Fold new events into state
-5. Return updated state and version
+`AggregateCommandExecutor.ExecuteAsync` workflow:
+1. Load current state from repository (with validation)
+2. Validate expected version if required by command
+3. Execute command via decider to produce events
+4. Validate fold (ensure events can be replayed without errors - returns new state)
+5. Append events to event store with optimistic concurrency (only after validation)
+6. Save snapshot if at interval using the validated state
+7. Return new state, pointer, and appended events
+
+`AggregateRepository` provides:
+- `LoadStateAsync` - Load state from events + snapshots with validation
+- `ValidateFold` - Validate events can be folded without errors (pre-append safety check)
+- `AppendEventsAsync` - Persist events to event store
+- `SaveSnapshotIfNeededAsync` - Save snapshot at configured interval using already-validated state
 
 ## Examples
 
