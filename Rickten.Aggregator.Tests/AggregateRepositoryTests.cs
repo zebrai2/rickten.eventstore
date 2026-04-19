@@ -404,9 +404,10 @@ public class AggregateRepositoryTests
             };
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
-            // Act: Apply events to initial state
+            // Act: Validate fold with raw events
             var initialState = new InvariantTestState(0);
-            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
 
             // Assert: State reflects applied events
             Assert.Equal(3, newState.Count);
@@ -438,9 +439,10 @@ public class AggregateRepositoryTests
             };
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
-            // Act: Apply events and save snapshot if needed
+            // Act: Validate fold and save snapshot if needed
             var initialState = new SnapshotTestState(0);
-            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
             await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: Snapshot was saved at version 3
@@ -475,9 +477,10 @@ public class AggregateRepositoryTests
             };
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
-            // Act: Apply events and save snapshot if needed
+            // Act: Validate fold and save snapshot if needed
             var initialState = new SnapshotTestState(0);
-            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
             await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: State was applied but no snapshot saved
@@ -510,9 +513,10 @@ public class AggregateRepositoryTests
             };
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
-            // Act: Apply events (no snapshot store configured)
+            // Act: Validate fold (no snapshot store configured)
             var initialState = new InvariantTestState(0);
-            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
             await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: Events were still applied
@@ -533,9 +537,9 @@ public class AggregateRepositoryTests
             var folder = new InvariantTestStateFolder(registry);
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
-            // Act: Apply empty event list
+            // Act: Validate fold with empty event list
             var currentState = new InvariantTestState(5);
-            var newState = repository.ApplyEvents(currentState, Array.Empty<StreamEvent>());
+            var newState = repository.ValidateFold(currentState, Array.Empty<object>());
 
             // Assert: State unchanged
             Assert.Equal(5, newState.Count);

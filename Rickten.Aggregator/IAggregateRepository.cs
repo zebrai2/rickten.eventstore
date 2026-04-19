@@ -48,17 +48,6 @@ public interface IAggregateRepository<TState>
         IReadOnlyList<object> events);
 
     /// <summary>
-    /// Applies appended events to the current state by folding them through the state folder.
-    /// This produces the new state after the events have been applied.
-    /// </summary>
-    /// <param name="currentState">The state before applying the events.</param>
-    /// <param name="appendedEvents">The events to apply.</param>
-    /// <returns>The new state after applying all events.</returns>
-    TState ApplyEvents(
-        TState currentState,
-        IReadOnlyList<StreamEvent> appendedEvents);
-
-    /// <summary>
     /// Saves a snapshot if the snapshot interval is configured and the final version
     /// is at an interval boundary.
     /// </summary>
