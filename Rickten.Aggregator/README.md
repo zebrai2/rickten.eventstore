@@ -183,7 +183,8 @@ public sealed record CancelOrder(string OrderId);
 // Configure services
 services.AddSingleton<IStateFolder<OrderState>, OrderStateFolder>();
 services.AddSingleton<ICommandDecider<OrderState, OrderCommand>, OrderCommandDecider>();
-services.AddSingleton<AggregateCommandExecutor<OrderState, OrderCommand>>();
+services.AddTransient<IAggregateRepository<OrderState>, AggregateRepository<OrderState>>();
+services.AddTransient<AggregateCommandExecutor<OrderState, OrderCommand>>();
 
 // Execute against latest state
 var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<OrderState, OrderCommand>>();
