@@ -47,7 +47,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "latest-version-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Act: Execute command without ExpectedVersionKey (default behavior)
@@ -72,7 +72,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "expected-version-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create initial version 1
@@ -103,7 +103,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "version-mismatch-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -141,7 +141,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "missing-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Act & Assert: Command has ExpectedVersionKey but metadata is missing
@@ -171,7 +171,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "invalid-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Act & Assert: Metadata value cannot be converted to long
@@ -200,7 +200,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "int-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -231,7 +231,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "string-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -262,7 +262,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "idempotent-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -334,7 +334,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var trackingDecider = new TrackingDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "decider-not-run-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, trackingDecider, registry);
 
             // Create version 1
@@ -370,7 +370,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "null-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Act & Assert: Metadata value is null
@@ -399,7 +399,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "short-metadata-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -430,7 +430,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(registry);
             var decider = new MetadataVersionTestDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "metadata-filtering-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
@@ -499,7 +499,7 @@ public class CommandVersionModeTests
             var folder = new MetadataVersionTestStateFolder(filteringRegistry);
             var trackingDecider = new TrackingDecider();
             var streamId = new StreamIdentifier("MetadataVersionTest", "unregistered-command-test");
-            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<MetadataVersionTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, trackingDecider, filteringRegistry);
 
             // Create a command that has the attribute but will be filtered from registry

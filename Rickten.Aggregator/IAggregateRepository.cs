@@ -48,14 +48,15 @@ public interface IAggregateRepository<TState>
         IReadOnlyList<object> events);
 
     /// <summary>
-    /// Saves a snapshot if the snapshot interval is configured and the final version
-    /// is at an interval boundary.
+    /// Saves a snapshot if the snapshot interval is configured and we crossed or reached an interval boundary.
     /// </summary>
     /// <param name="newState">The state to snapshot.</param>
-    /// <param name="finalVersion">The stream pointer at which to save the snapshot.</param>
+    /// <param name="previousVersion">The version before appending events.</param>
+    /// <param name="finalVersion">The stream pointer after appending events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SaveSnapshotIfNeededAsync(
         TState newState,
+        long previousVersion,
         StreamPointer finalVersion,
         CancellationToken cancellationToken = default);
 }

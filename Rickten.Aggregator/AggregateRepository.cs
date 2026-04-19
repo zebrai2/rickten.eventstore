@@ -7,27 +7,20 @@ namespace Rickten.Aggregator;
 /// Handles event stream loading, state folding, event persistence, and snapshot management.
 /// </summary>
 /// <typeparam name="TState">The aggregate state type.</typeparam>
-public class AggregateRepository<TState> : IAggregateRepository<TState>
+/// <remarks>
+/// Initializes a new instance of the <see cref="AggregateRepository{TState}"/> class.
+/// </remarks>
+/// <param name="eventStore">The event store.</param>
+/// <param name="folder">The state folder for this aggregate type.</param>
+/// <param name="snapshotStore">Snapshot store for loading and saving snapshots.</param>
+public class AggregateRepository<TState>(
+    IEventStore eventStore,
+    IStateFolder<TState> folder,
+    ISnapshotStore snapshotStore) : IAggregateRepository<TState>
 {
-    private readonly IEventStore _eventStore;
-    private readonly IStateFolder<TState> _folder;
-    private readonly ISnapshotStore? _snapshotStore;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AggregateRepository{TState}"/> class.
-    /// </summary>
-    /// <param name="eventStore">The event store.</param>
-    /// <param name="folder">The state folder for this aggregate type.</param>
-    /// <param name="snapshotStore">Optional snapshot store for loading and saving snapshots.</param>
-    public AggregateRepository(
-        IEventStore eventStore,
-        IStateFolder<TState> folder,
-        ISnapshotStore? snapshotStore = null)
-    {
-        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _folder = folder ?? throw new ArgumentNullException(nameof(folder));
-        _snapshotStore = snapshotStore;
-    }
+    private readonly IEventStore _eventStore        = eventStore    ?? throw new ArgumentNullException(nameof(eventStore));
+    private readonly IStateFolder<TState> _folder   = folder        ?? throw new ArgumentNullException(nameof(folder));
+    private readonly ISnapshotStore _snapshotStore  = snapshotStore ?? throw new ArgumentNullException(nameof(snapshotStore));
 
     /// <summary>
     /// Loads all events from a stream, validates ordering and completeness, and folds them into state.
@@ -41,71 +34,23 @@ public class AggregateRepository<TState> : IAggregateRepository<TState>
         StreamIdentifier streamIdentifier,
         CancellationToken cancellationToken = default)
     {
-        // Determine starting state and version
-        TState state;
-        long version;
+        var snapshot = await _snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken);
+        var version  = snapshot?.StreamPointer.Version ?? 0;
+        var pointer  = streamIdentifier.At(version);
 
-        if (_snapshotStore != null)
-        {
-            var snapshot = await _snapshotStore.LoadSnapshotAsync(streamIdentifier, cancellationToken);
-            if (snapshot != null && snapshot.State is TState snapshotState)
-            {
-                state = snapshotState;
-                version = snapshot.StreamPointer.Version;
-            }
-            else
-            {
-                state = _folder.InitialState();
-                version = 0;
-            }
-        }
-        else
-        {
-            state = _folder.InitialState();
-            version = 0;
-        }
+        var state = (snapshot != null && snapshot.State is TState snapshotState)
+            ? snapshotState
+            : _folder.InitialState();
 
-        // Use implicit cast from StreamIdentifier to StreamPointer (version 0), then MoveTo starting version
-        var pointer = ((StreamPointer)streamIdentifier) with { Version = version };
 
         await foreach (var streamEvent in _eventStore.LoadAsync(pointer, cancellationToken))
         {
-            // Validate stream identifier matches
-            if (streamEvent.StreamPointer.Stream != streamIdentifier)
-            {
-                throw new InvalidOperationException(
-                    $"Stream identifier mismatch. Expected {streamIdentifier.StreamType}/{streamIdentifier.Identifier}, " +
-                    $"got {streamEvent.StreamPointer.Stream.StreamType}/{streamEvent.StreamPointer.Stream.Identifier}");
-            }
+            var expectedVersion = ++version;
 
-            // Validate version ordering (events are 1-indexed)
-            // The next event must be exactly version + 1
-            var expectedVersion = version + 1;
-            if (streamEvent.StreamPointer.Version != expectedVersion)
-            {
-                if (streamEvent.StreamPointer.Version < expectedVersion)
-                {
-                    throw new InvalidOperationException(
-                        $"Duplicate or out-of-order event in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier}. " +
-                        $"Expected version {expectedVersion}, got {streamEvent.StreamPointer.Version}");
-                }
-                else
-                {
-                    throw new InvalidOperationException(
-                        $"Gap in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier}. " +
-                        $"Expected version {expectedVersion}, got {streamEvent.StreamPointer.Version}. " +
-                        $"Missing versions: {string.Join(", ", Enumerable.Range((int)expectedVersion, (int)(streamEvent.StreamPointer.Version - expectedVersion)))}");
-                }
-            }
+            ValidateStreamType(streamIdentifier, streamEvent);
+            ValidateStreamVersion(streamIdentifier, streamEvent, expectedVersion);
+            ValidateEvent(streamIdentifier, streamEvent);
 
-            // Validate event is not null
-            if (streamEvent.Event == null)
-            {
-                throw new InvalidOperationException(
-                    $"Null event found in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier} at version {streamEvent.StreamPointer.Version}");
-            }
-
-            // Apply event to state
             state = _folder.Apply(state, streamEvent.Event);
             version = streamEvent.StreamPointer.Version;
         }
@@ -113,21 +58,43 @@ public class AggregateRepository<TState> : IAggregateRepository<TState>
         return (state, version);
     }
 
-    /// <summary>
-    /// Internal helper for applying a list of events to state.
-    /// Used by LoadStateAsync and ApplyEvents (public method).
-    /// </summary>
-    /// <param name="state">The current state.</param>
-    /// <param name="events">The events to apply.</param>
-    /// <returns>The new state after applying all events.</returns>
-    private TState ApplyEventsInternal(TState state, IReadOnlyList<object> events)
+    private static void ValidateEvent(StreamIdentifier streamIdentifier, StreamEvent streamEvent)
     {
-        var newState = state;
-        foreach (var evt in events)
+        if (streamEvent.Event == null)
         {
-            newState = _folder.Apply(newState, evt);
+            throw new InvalidOperationException(
+                $"Null event found in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier} at version {streamEvent.StreamPointer.Version}");
         }
-        return newState;
+    }
+
+    private static void ValidateStreamVersion(StreamIdentifier streamIdentifier, StreamEvent streamEvent, long expectedVersion)
+    {
+        if (!streamEvent.IsVersion(expectedVersion))
+        {
+            if (streamEvent.GetVersion() < expectedVersion)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate or out-of-order event in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier}. " +
+                    $"Expected version {expectedVersion}, got {streamEvent.StreamPointer.Version}");
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Gap in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier}. " +
+                    $"Expected version {expectedVersion}, got {streamEvent.StreamPointer.Version}. " +
+                    $"Missing versions: {string.Join(", ", Enumerable.Range((int)expectedVersion, (int)(streamEvent.StreamPointer.Version - expectedVersion)))}");
+            }
+        }
+    }
+
+    private static void ValidateStreamType(StreamIdentifier streamIdentifier, StreamEvent streamEvent)
+    {
+        if (!streamEvent.IsOfStream(streamIdentifier))
+        {
+            throw new InvalidOperationException(
+                $"Stream identifier mismatch. Expected {streamIdentifier.StreamType}/{streamIdentifier.Identifier}, " +
+                $"got {streamEvent.StreamPointer.Stream.StreamType}/{streamEvent.StreamPointer.Stream.Identifier}");
+        }
     }
 
     /// <summary>
@@ -159,29 +126,44 @@ public class AggregateRepository<TState> : IAggregateRepository<TState>
         TState currentState,
         IReadOnlyList<object> events)
     {
-        return ApplyEventsInternal(currentState, events);
+        var newState = currentState;
+        foreach (var evt in events)
+        {
+            newState = _folder.Apply(newState, evt);
+        }
+        return newState;
     }
 
     /// <summary>
-    /// Saves a snapshot if the snapshot interval is configured and the final version
-    /// is at an interval boundary.
+    /// Saves a snapshot if the snapshot interval is configured and we crossed or reached an interval boundary.
     /// </summary>
     /// <param name="newState">The state to snapshot.</param>
-    /// <param name="finalVersion">The stream pointer at which to save the snapshot.</param>
+    /// <param name="previousVersion">The version before appending events.</param>
+    /// <param name="finalVersion">The stream pointer after appending events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task SaveSnapshotIfNeededAsync(
         TState newState,
+        long previousVersion,
         StreamPointer finalVersion,
         CancellationToken cancellationToken = default)
     {
-        // Save snapshot if at interval boundary
-        if (_snapshotStore != null && _folder is StateFolder<TState> stateFolder)
+        if (_folder is not StateFolder<TState> stateFolder)
+            return;
+
+        var snapshotInterval = stateFolder.SnapshotInterval;
+        if (snapshotInterval <= 0)
+            return;
+
+        // Check if we crossed or landed on an interval boundary
+        // Example: interval=100, went from v99 to v201
+        // Previous boundary: 99/100 = 0, Current boundary: 201/100 = 2
+        // We crossed boundaries (0 != 2), so we should snapshot
+        var previousBoundary = previousVersion / snapshotInterval;
+        var currentBoundary = finalVersion.Version / snapshotInterval;
+
+        if (currentBoundary > previousBoundary)
         {
-            var snapshotInterval = stateFolder.SnapshotInterval;
-            if (snapshotInterval > 0 && finalVersion.Version % snapshotInterval == 0)
-            {
-                await _snapshotStore.SaveSnapshotAsync(finalVersion, newState!, cancellationToken);
-            }
+            await _snapshotStore.SaveSnapshotAsync(finalVersion, newState!, cancellationToken);
         }
     }
 }

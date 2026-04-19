@@ -26,7 +26,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "valid-test");
-            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Append multiple valid events
             var pointer = new StreamPointer(streamId, 0);
@@ -58,7 +58,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "empty-stream");
-            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Load state from non-existent stream
             var (state, version) = await AggregateRepository.LoadStateAsync(streamId);
@@ -130,7 +130,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "continuity-test");
-            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Append events normally (EventStore ensures continuity)
             var pointer = new StreamPointer(streamId, 0);
@@ -238,7 +238,7 @@ public class AggregateRepositoryTests
             var folder = new InvariantTestStateFolder(registry);
             var decider = new InvariantTestDecider();
             var streamId = new StreamIdentifier("InvariantTest", "concurrency-test");
-            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<InvariantTestState, InvariantTestCommand>(AggregateRepository, decider, registry);
 
             // Create initial state
@@ -274,7 +274,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "append-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Append events to new stream (version 0)
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
@@ -305,7 +305,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "conflict-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // First append to establish version 1
             var pointer1 = ((StreamPointer)streamId) with { Version = 0 };
@@ -332,7 +332,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "atomic-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Append 5 events atomically
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
@@ -367,7 +367,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "empty-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Append empty list
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
@@ -392,7 +392,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "apply-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Append events first
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
@@ -425,31 +425,26 @@ public class AggregateRepositoryTests
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
-            var folder = new SnapshotTestStateFolder(registry); // Has interval of 3
+            var folder = new SnapshotTestStateFolder(registry); // Has interval of 100
             var streamId = new StreamIdentifier("SnapshotTest", "boundary-test");
             var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
 
-            // Append exactly 3 events (at snapshot boundary)
+            // Append exactly 100 events (at snapshot boundary)
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
-            var events = new[]
-            {
-                new AppendEvent(new SnapshotTestEvent(), null),
-                new AppendEvent(new SnapshotTestEvent(), null),
-                new AppendEvent(new SnapshotTestEvent(), null)
-            };
+            var events = Enumerable.Range(0, 100).Select(_ => new AppendEvent(new SnapshotTestEvent(), null)).ToList();
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
             // Act: Validate fold and save snapshot if needed
             var initialState = new SnapshotTestState(0);
             var rawEvents = events.Select(e => e.Event).ToList();
             var newState = repository.ValidateFold(initialState, rawEvents);
-            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
+            await repository.SaveSnapshotIfNeededAsync(newState, 0, appendedEvents.Last().StreamPointer);
 
-            // Assert: Snapshot was saved at version 3
+            // Assert: Snapshot was saved at version 100
             var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
             Assert.NotNull(snapshot);
-            Assert.Equal(3, snapshot!.StreamPointer.Version);
-            Assert.Equal(3, ((SnapshotTestState)snapshot.State).Count);
+            Assert.Equal(100, snapshot!.StreamPointer.Version);
+            Assert.Equal(100, ((SnapshotTestState)snapshot.State).Count);
         }
     }
 
@@ -481,7 +476,7 @@ public class AggregateRepositoryTests
             var initialState = new SnapshotTestState(0);
             var rawEvents = events.Select(e => e.Event).ToList();
             var newState = repository.ValidateFold(initialState, rawEvents);
-            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
+            await repository.SaveSnapshotIfNeededAsync(newState, 0, appendedEvents.Last().StreamPointer);
 
             // Assert: State was applied but no snapshot saved
             Assert.Equal(2, newState.Count);
@@ -502,7 +497,7 @@ public class AggregateRepositoryTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
             var streamId = new StreamIdentifier("InvariantTest", "no-store-test");
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder); // No snapshot store
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance); // No snapshot store
 
             // Append events
             var pointer = ((StreamPointer)streamId) with { Version = 0 };
@@ -517,7 +512,7 @@ public class AggregateRepositoryTests
             var initialState = new InvariantTestState(0);
             var rawEvents = events.Select(e => e.Event).ToList();
             var newState = repository.ValidateFold(initialState, rawEvents);
-            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
+            await repository.SaveSnapshotIfNeededAsync(newState, 0, appendedEvents.Last().StreamPointer);
 
             // Assert: Events were still applied
             Assert.Equal(2, newState.Count);
@@ -535,7 +530,7 @@ public class AggregateRepositoryTests
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Validate fold with empty event list
             var currentState = new InvariantTestState(5);
@@ -558,7 +553,7 @@ public class AggregateRepositoryTests
             var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new InvariantTestStateFolder(registry);
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act: Validate folding raw events
             var currentState = new InvariantTestState(2);
@@ -587,7 +582,7 @@ public class AggregateRepositoryTests
 
             // Use a folder that throws in When handler
             var folder = new ThrowingStateFolder(registry);
-            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
+            var repository = new AggregateRepository<InvariantTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
 
             // Act & Assert: Validation throws before any persistence
             var currentState = new InvariantTestState(0);
@@ -600,6 +595,110 @@ public class AggregateRepositoryTests
             // Verify inner exception is what we expect
             Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.Contains("Bad When handler", ex.InnerException!.Message);
+        }
+    }
+
+    [Fact]
+    public async Task SaveSnapshotIfNeededAsync_CrossingBoundary_SavesSnapshot()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new SnapshotTestStateFolder(registry);
+            var streamId = new StreamIdentifier("SnapshotTest", "boundary-crossing");
+            var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
+
+            // Arrange: Go from version 99 to 201 (crossing boundaries at 100 and 200)
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
+            var events = Enumerable.Range(0, 201).Select(_ => new AppendEvent(new SnapshotTestEvent(), null)).ToList();
+            var appendedEvents = await repository.AppendEventsAsync(pointer, events);
+
+            var initialState = new SnapshotTestState(0);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
+
+            // Act: Save snapshot after crossing from 99 to 201
+            await repository.SaveSnapshotIfNeededAsync(newState, 99, appendedEvents.Last().StreamPointer);
+
+            // Assert: Snapshot was saved (we crossed boundaries)
+            var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
+            Assert.NotNull(snapshot);
+            Assert.Equal(201, snapshot!.StreamPointer.Version);
+            Assert.Equal(201, ((SnapshotTestState)snapshot.State).Count);
+        }
+    }
+
+    [Fact]
+    public async Task SaveSnapshotIfNeededAsync_SkippingMultipleBoundaries_SavesSnapshot()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new SnapshotTestStateFolder(registry);
+            var streamId = new StreamIdentifier("SnapshotTest", "skip-boundaries");
+            var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
+
+            // Arrange: Go from version 50 to 350 in one batch (skipping boundaries at 100, 200, 300)
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
+            var events = Enumerable.Range(0, 350).Select(_ => new AppendEvent(new SnapshotTestEvent(), null)).ToList();
+            var appendedEvents = await repository.AppendEventsAsync(pointer, events);
+
+            var initialState = new SnapshotTestState(0);
+            var rawEvents = events.Select(e => e.Event).ToList();
+            var newState = repository.ValidateFold(initialState, rawEvents);
+
+            // Act: Save snapshot after going from 50 to 350
+            await repository.SaveSnapshotIfNeededAsync(newState, 50, appendedEvents.Last().StreamPointer);
+
+            // Assert: Snapshot was saved at final version
+            var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
+            Assert.NotNull(snapshot);
+            Assert.Equal(350, snapshot!.StreamPointer.Version);
+            Assert.Equal(350, ((SnapshotTestState)snapshot.State).Count);
+        }
+    }
+
+    [Fact]
+    public async Task SaveSnapshotIfNeededAsync_NotCrossingBoundary_DoesNotSaveSnapshot()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var snapshotStore = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new SnapshotTestStateFolder(registry);
+            var streamId = new StreamIdentifier("SnapshotTest", $"no-crossing-{Guid.NewGuid()}");
+            var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
+
+            // Arrange: Create a minimal stream and test boundary logic directly
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
+            var singleEvent = new List<AppendEvent> { new AppendEvent(new SnapshotTestEvent(), null) };
+            await repository.AppendEventsAsync(pointer, singleEvent);
+
+            // Create a state and pointer that simulate being at version 105 going to 150
+            // Both 105/100=1 and 150/100=1, so no boundary crossed
+            var state = new SnapshotTestState(150);
+            var finalPointer = ((StreamPointer)streamId) with { Version = 150 };
+
+            // Act: Save snapshot after "going from" 105 to 150 (not crossing boundary)
+            await repository.SaveSnapshotIfNeededAsync(state, 105, finalPointer);
+
+            // Assert: No snapshot saved (didn't cross boundary - both 105/100=1 and 150/100=1)
+            var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
+            Assert.Null(snapshot);
         }
     }
 }
@@ -619,7 +718,7 @@ public class ThrowingStateFolder : StateFolder<InvariantTestState>
 }
 
 // Test domain for snapshot tests
-[Aggregate("SnapshotTest", SnapshotInterval = 3)]
+[Aggregate("SnapshotTest", SnapshotInterval = 100)]
 public record SnapshotTestState(int Count = 0);
 
 [Event("SnapshotTest", "Event", 1)]

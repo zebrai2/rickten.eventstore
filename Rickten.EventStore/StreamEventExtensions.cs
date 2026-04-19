@@ -29,4 +29,16 @@ public static class StreamEventExtensions
 
         return events[events.Count - 1].StreamPointer;
     }
+
+    public static StreamIdentifier GetStreamIdentifier(this StreamEvent @event)
+        => @event.StreamPointer.Stream;
+
+    public static long GetVersion(this StreamEvent @event)
+    => @event.StreamPointer.Version;
+
+    public static bool IsOfStream(this StreamEvent @event, StreamIdentifier streamIdentifier)
+        => @event.GetStreamIdentifier() == streamIdentifier;
+
+    public static bool IsVersion(this StreamEvent @event, long expectedVersion)
+    => @event.GetVersion() == expectedVersion;
 }

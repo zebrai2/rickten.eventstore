@@ -6,6 +6,8 @@ namespace Rickten.Aggregator;
 /// <typeparam name="TState">The type of the aggregate state.</typeparam>
 public interface IStateFolder<TState>
 {
+    int SnapshotInterval { get; }
+
     /// <summary>
     /// Gets the initial state before any events are applied.
     /// </summary>

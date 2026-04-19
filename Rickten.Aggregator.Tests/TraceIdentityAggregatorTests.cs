@@ -101,7 +101,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p1");
-        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder);
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         var providedCorrelationId = Guid.NewGuid();
@@ -128,7 +128,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p2");
-        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder);
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         var providedCausationId = Guid.NewGuid();
@@ -157,7 +157,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         // Create a decider that produces multiple events
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p3");
-        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder);
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, multiEventDecider, registry);
 
         var result = await executor.ExecuteAsync(
@@ -183,7 +183,7 @@ public class TraceIdentityAggregatorTests : IDisposable
 
         var multiEventDecider = new MultiEventDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p4");
-        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder);
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, multiEventDecider, registry);
 
         var result = await executor.ExecuteAsync(
@@ -209,7 +209,7 @@ public class TraceIdentityAggregatorTests : IDisposable
         var folder = new ProductFolder(registry);
         var decider = new CreateProductDecider();
         var streamId = new StreamIdentifier("TraceProduct", "p5");
-        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder);
+        var AggregateRepository = new AggregateRepository<ProductState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor1 = new AggregateCommandExecutor<ProductState, CreateProduct>(AggregateRepository, decider, registry);
 
         // First command execution

@@ -42,7 +42,7 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             var (state, version, events) = await executor.ExecuteAsync(
@@ -249,7 +249,7 @@ public class SnapshotTests
             var folder = new TestStateFolder(registry);
             var decider = new TestCommandDecider();
             var streamId = new StreamIdentifier("Test", "1");
-            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder);
+            var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
             // Create 30 events

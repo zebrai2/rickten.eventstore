@@ -74,7 +74,7 @@ public class AggregateCommandExecutor<TState, TCommand>
         var appendedEvents      = await _repository.AppendEventsAsync(pointer, appendEvents, cancellationToken);
         var finalVersion        = appendedEvents.LastVersion();
 
-        await _repository.SaveSnapshotIfNeededAsync(newState, finalVersion, cancellationToken);
+        await _repository.SaveSnapshotIfNeededAsync(newState, currentVersion, finalVersion, cancellationToken);
         return (newState, finalVersion.Version, appendedEvents);
     }
 
