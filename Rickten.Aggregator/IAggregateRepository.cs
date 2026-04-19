@@ -35,15 +35,25 @@ public interface IAggregateRepository<TState>
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Applies appended events to the current state and saves a snapshot if the snapshot interval 
-    /// is configured and the final version is at an interval boundary.
+    /// Applies appended events to the current state by folding them through the state folder.
+    /// This produces the new state after the events have been applied.
     /// </summary>
-    /// <param name="currentState">The state before applying the appended events.</param>
-    /// <param name="appendedEvents">The events that were appended to the event store.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="currentState">The state before applying the events.</param>
+    /// <param name="appendedEvents">The events to apply.</param>
     /// <returns>The new state after applying all events.</returns>
-    Task<TState> SaveSnapshotIfNeededAsync(
+    TState ApplyEvents(
         TState currentState,
-        IReadOnlyList<StreamEvent> appendedEvents,
+        IReadOnlyList<StreamEvent> appendedEvents);
+
+    /// <summary>
+    /// Saves a snapshot if the snapshot interval is configured and the final version
+    /// is at an interval boundary.
+    /// </summary>
+    /// <param name="newState">The state to snapshot.</param>
+    /// <param name="finalVersion">The stream pointer at which to save the snapshot.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task SaveSnapshotIfNeededAsync(
+        TState newState,
+        StreamPointer finalVersion,
         CancellationToken cancellationToken = default);
 }

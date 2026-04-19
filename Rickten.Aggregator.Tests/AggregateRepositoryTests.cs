@@ -404,9 +404,9 @@ public class AggregateRepositoryTests
             };
             var appendedEvents = await repository.AppendEventsAsync(pointer, events);
 
-            // Act: Apply events to initial state (no snapshot store, so just applies events)
+            // Act: Apply events to initial state
             var initialState = new InvariantTestState(0);
-            var newState = await repository.SaveSnapshotIfNeededAsync(initialState, appendedEvents);
+            var newState = repository.ApplyEvents(initialState, appendedEvents);
 
             // Assert: State reflects applied events
             Assert.Equal(3, newState.Count);
@@ -440,7 +440,8 @@ public class AggregateRepositoryTests
 
             // Act: Apply events and save snapshot if needed
             var initialState = new SnapshotTestState(0);
-            var newState = await repository.SaveSnapshotIfNeededAsync(initialState, appendedEvents);
+            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: Snapshot was saved at version 3
             var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -476,7 +477,8 @@ public class AggregateRepositoryTests
 
             // Act: Apply events and save snapshot if needed
             var initialState = new SnapshotTestState(0);
-            var newState = await repository.SaveSnapshotIfNeededAsync(initialState, appendedEvents);
+            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: State was applied but no snapshot saved
             Assert.Equal(2, newState.Count);
@@ -510,7 +512,8 @@ public class AggregateRepositoryTests
 
             // Act: Apply events (no snapshot store configured)
             var initialState = new InvariantTestState(0);
-            var newState = await repository.SaveSnapshotIfNeededAsync(initialState, appendedEvents);
+            var newState = repository.ApplyEvents(initialState, appendedEvents);
+            await repository.SaveSnapshotIfNeededAsync(newState, appendedEvents.Last().StreamPointer);
 
             // Assert: Events were still applied
             Assert.Equal(2, newState.Count);
@@ -532,7 +535,7 @@ public class AggregateRepositoryTests
 
             // Act: Apply empty event list
             var currentState = new InvariantTestState(5);
-            var newState = await repository.SaveSnapshotIfNeededAsync(currentState, Array.Empty<StreamEvent>());
+            var newState = repository.ApplyEvents(currentState, Array.Empty<StreamEvent>());
 
             // Assert: State unchanged
             Assert.Equal(5, newState.Count);

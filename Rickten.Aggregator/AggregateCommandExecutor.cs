@@ -69,17 +69,19 @@ public class AggregateCommandExecutor<TState, TCommand>
         }
 
         // Step 4: Append events to store (persist first)
-        // Use implicit cast from StreamIdentifier to StreamPointer (version 0), then MoveTo current version
+        // Use implicit cast from StreamIdentifier to StreamPointer (version 0), then WithVersion to current version
         var pointer = ((StreamPointer)streamIdentifier).WithVersion(currentVersion);
         var appendEvents = events.Select(e => new AppendEvent(e, filteredMetadata)).ToList();
         var appendedEvents = await _repository.AppendEventsAsync(pointer, appendEvents, cancellationToken);
 
-        // Step 5: Apply events to state and save snapshot if needed
-        var newState = await _repository.SaveSnapshotIfNeededAsync(state, appendedEvents, cancellationToken);
+        // Step 5: Apply events to state (fold second)
+        var newState = _repository.ApplyEvents(state, appendedEvents);
 
-        var newVersion = appendedEvents.Last().StreamPointer.Version;
+        // Step 6: Save snapshot if at interval boundary
+        var finalVersion = appendedEvents.Last().StreamPointer;
+        await _repository.SaveSnapshotIfNeededAsync(newState, finalVersion, cancellationToken);
 
-        return (newState, newVersion, appendedEvents);
+        return (newState, finalVersion.Version, appendedEvents);
     }
 
     /// <summary>

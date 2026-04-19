@@ -466,6 +466,7 @@ public sealed class SessionReviewStateFolder : StateFolder<SessionReviewState>
 // In your DI configuration
 services.AddSingleton<ISnapshotStore>(sp => /* your snapshot store */);
 services.AddSingleton<IStateFolder<SessionReviewState>, SessionReviewStateFolder>();
+services.AddSingleton<ICommandDecider<SessionReviewState, SessionReviewCommand>, SessionReviewCommandDecider>();
 services.AddTransient<IAggregateRepository<SessionReviewState>, AggregateRepository<SessionReviewState>>();
 services.AddTransient<AggregateCommandExecutor<SessionReviewState, SessionReviewCommand>>();
 
