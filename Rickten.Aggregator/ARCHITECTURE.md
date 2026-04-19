@@ -126,7 +126,7 @@ public async Task<(TState, StreamPointer, IReadOnlyList<StreamEvent>)> ExecuteAs
     var (state, currentPointer) = await repository.LoadStateAsync(streamIdentifier, ct);
 
     // Step 2: Validate expected version (if command declares ExpectedVersionKey)
-    if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
+    if (expectedVersion.HasValue && currentPointer != expectedVersion.Value)
         throw new StreamVersionConflictException(...);
 
     // Step 3: Execute command → produce events

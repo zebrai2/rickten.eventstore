@@ -334,12 +334,30 @@ Represents a pointer to a specific version within a stream.
 ```csharp
 public sealed record StreamPointer(
     StreamIdentifier Stream,
-    long Version);
+    long Version) : IComparable<StreamPointer>, IComparable<long>;
 ```
 
 **Properties:**
 - `Stream` (StreamIdentifier): The stream identifier
 - `Version` (long): The current stream version (last written event version). Version 0 indicates a new stream with no events. Version N means the stream has N events, and the next append will write version N+1.
+
+**Comparison Operators:**
+
+StreamPointer supports comparison with other StreamPointers or long values:
+
+```csharp
+var pointer1 = new StreamPointer(streamId, 5);
+var pointer2 = new StreamPointer(streamId, 10);
+
+// Compare StreamPointers (throws if streams don't match)
+if (pointer1 < pointer2) { /* ... */ }
+if (pointer1 >= pointer2) { /* ... */ }
+
+// Compare with long values
+if (pointer1 == 5) { /* ... */ }
+if (pointer2 > 5) { /* ... */ }
+if (10 <= pointer2) { /* ... */ }
+```
 
 **Example:**
 ```csharp

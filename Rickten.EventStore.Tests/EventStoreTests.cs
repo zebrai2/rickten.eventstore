@@ -294,7 +294,7 @@ public class EventStoreTests
         Assert.Equal(4, result2[1].StreamPointer.Version);
 
         // Verify no duplicate of version 2
-        Assert.DoesNotContain(result2, e => e.StreamPointer.Version == 2);
+        Assert.DoesNotContain(result2, e => e.StreamPointer == 2);
     }
 
     [Fact]
@@ -329,7 +329,7 @@ public class EventStoreTests
         Assert.Equal(5, loaded[1].StreamPointer.Version);
 
         // Verify version 3 is NOT included (this would be the bug)
-        Assert.DoesNotContain(loaded, e => e.StreamPointer.Version == 3);
+        Assert.DoesNotContain(loaded, e => e.StreamPointer == 3);
     }
 
     [Fact]
