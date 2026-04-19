@@ -31,6 +31,9 @@ public class TestAggregateStateFolder : StateFolder<TestAggregateState>
 
     public override TestAggregateState InitialState() => new TestAggregateState("", 0);
 
+    // TestTriggeredEvent is a trigger from outside this aggregate - it doesn't modify this aggregate's state
+    protected override ISet<Type> IgnoredEvents => new HashSet<Type> { typeof(TestTriggeredEvent) };
+
     protected TestAggregateState When(TestProcessedEvent e, TestAggregateState state)
     {
         return state with { Id = e.Id, ProcessCount = state.ProcessCount + 1 };
@@ -256,13 +259,116 @@ public class ReactionHostedServiceTests : IDisposable
         Assert.True(true);
     }
 
-    [Fact(Skip = "End-to-end integration test - requires real infrastructure for reliable timing")]
-    public async Task HostedService_Processes_Reaction_On_Interval()
+    [Fact]
+    public async Task HostedService_Processes_Reaction_And_Executes_Commands()
     {
-        // This test would verify full end-to-end reaction execution
-        // Skipped: Complex timing dependencies with in-memory database
-        // Better suited for integration test suite with real infrastructure
-        await Task.CompletedTask;
+        // This test proves the core promise: hosted service calls catch-up and produces reaction output
+
+        // Arrange
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+
+        // Append trigger event
+        var stream = new StreamIdentifier("TestAggregate", "test-1");
+        await eventStore.AppendAsync(new StreamPointer(stream, 0), new List<AppendEvent>
+        {
+            new AppendEvent(new TestTriggeredEvent("test-1", 42), null)
+        });
+
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddSingleton(_connection);
+        services.AddSingleton<IEventStore>(eventStore);
+        services.AddSingleton<IProjectionStore>(_projectionStore);
+        services.AddSingleton(_serviceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>());
+
+        services.AddReactions(typeof(TestReaction).Assembly);
+
+        services.AddTransient<TestAggregateStateFolder>();
+        services.AddTransient<TestCommandDecider>();
+        services.AddTransient<AggregateRepository<TestAggregateState>>(sp =>
+            new AggregateRepository<TestAggregateState>(
+                sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<TestAggregateStateFolder>(),
+                NoOpSnapshotStore.Instance));
+
+        services.AddTransient<AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>>(sp =>
+            new AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>(
+                sp.GetRequiredService<AggregateRepository<TestAggregateState>>(),
+                sp.GetRequiredService<TestCommandDecider>(),
+                sp.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>()));
+
+        // Use very short polling interval for faster test
+        services.AddRicktenRuntime(options =>
+        {
+            options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
+        });
+
+        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
+
+        var provider = services.BuildServiceProvider();
+
+        // Verify all dependencies can be resolved before starting
+        using (var scope = provider.CreateScope())
+        {
+            var testReaction = scope.ServiceProvider.GetRequiredService<TestReaction>();
+            var testExecutor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>>();
+            var testEventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var testProjectionStore = scope.ServiceProvider.GetRequiredService<IProjectionStore>();
+
+            Assert.NotNull(testReaction);
+            Assert.NotNull(testExecutor);
+            Assert.NotNull(testEventStore);
+            Assert.NotNull(testProjectionStore);
+        }
+
+        // Act - Start the host
+        var cts = new CancellationTokenSource();
+        var host = provider.GetRequiredService<IHostedService>();
+
+        // Start the host and give it a moment to begin execution
+        await host.StartAsync(cts.Token);
+        await Task.Delay(200); // Give the background service time to start
+
+        // Poll for the processed event with timeout
+        var processedEventFound = false;
+        var timeout = TimeSpan.FromSeconds(10);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        while (!processedEventFound && stopwatch.Elapsed < timeout)
+        {
+            var events = new List<StreamEvent>();
+            await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+            {
+                events.Add(evt);
+            }
+
+            processedEventFound = events.Any(e => e.Event is TestProcessedEvent);
+
+            if (!processedEventFound)
+            {
+                await Task.Delay(100);
+            }
+        }
+
+        // Stop the host
+        cts.Cancel();
+        await host.StopAsync(CancellationToken.None);
+
+        // Assert - The reaction must have executed the command
+        Assert.True(processedEventFound, 
+            $"Reaction did not execute command within {timeout.TotalSeconds} seconds. " +
+            "The hosted service should have called ReactionRunner.CatchUpAsync and produced a TestProcessedEvent.");
+
+        // Verify the full event sequence
+        var finalEvents = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+        {
+            finalEvents.Add(evt);
+        }
+
+        Assert.Contains(finalEvents, e => e.Event is TestTriggeredEvent);
+        Assert.Contains(finalEvents, e => e.Event is TestProcessedEvent);
     }
 
     [Fact(Skip = "End-to-end integration test - requires real infrastructure for reliable timing")]
