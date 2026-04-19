@@ -417,7 +417,7 @@ Return to caller
 │  └────────────────────────────────┘  │
 │              │                        │
 │              v                        │
-│      (state, version)                 │
+│      (state, pointer)                 │
 └──────────────────────────────────────┘
 ```
 
@@ -530,10 +530,10 @@ public async Task AggregateRepository_LoadStateAsync_LoadsFromSnapshot()
     await eventStore.AppendAsync(...);
 
     // Act
-    var (state, version) = await repository.LoadStateAsync(streamId);
+    var (state, pointer) = await repository.LoadStateAsync(streamId);
 
     // Assert
-    Assert.Equal(expectedVersion, version);
+    Assert.Equal(expectedVersion, pointer.Version);
     Assert.Equal(expectedState, state);
 }
 
@@ -551,8 +551,9 @@ public async Task AggregateCommandExecutor_ExecuteAsync_ValidatesThenPersists()
     Assert.Equal(events, loadedEvents);
 
     // Assert: State derived from events
-    var (loadedState, _) = await repository.LoadStateAsync(streamId);
+    var (loadedState, loadedPointer) = await repository.LoadStateAsync(streamId);
     Assert.Equal(state, loadedState);
+    Assert.Equal(pointer, loadedPointer);
 }
 ```
 

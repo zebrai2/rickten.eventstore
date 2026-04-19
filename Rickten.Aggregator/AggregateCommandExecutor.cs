@@ -3,9 +3,10 @@ using Rickten.EventStore;
 namespace Rickten.Aggregator;
 
 /// <summary>
-/// Orchestrates the full command execution workflow: load state, execute command, append events, and optionally save snapshots.
-/// This class provides the complete command execution logic including expected version validation.
-/// State management (loading, folding, event persistence, snapshotting) is delegated to AggregateRepository.
+/// Orchestrates the full command execution workflow: load state, validate expected version (if required), 
+/// execute command, validate fold (pre-append safety check), append events, and optionally save snapshots.
+/// This class provides the complete command execution logic with data safety guarantees.
+/// State management (loading, fold validation, event persistence, snapshotting) is delegated to AggregateRepository.
 /// </summary>
 /// <typeparam name="TState">The aggregate state type.</typeparam>
 /// <typeparam name="TCommand">The command type.</typeparam>
@@ -33,7 +34,8 @@ public class AggregateCommandExecutor<TState, TCommand>
 
     /// <summary>
     /// Executes a command against an aggregate stream.
-    /// Loads current state, executes the command, appends events, and optionally saves snapshots.
+    /// Workflow: load state, validate expected version (if required), execute command via decider, 
+    /// validate fold (pre-append safety check), append events, and optionally save snapshots.
     /// </summary>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
