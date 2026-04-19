@@ -16,7 +16,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "UserId", "user-123")
+            new("Client", "UserId", "user-123")
         };
 
         var result = metadata.GetString("UserId");
@@ -29,7 +29,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>("\"test-value\"");
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Key", jsonElement)
+            new("Client", "Key", jsonElement)
         };
 
         var result = metadata.GetString("Key");
@@ -41,7 +41,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Key", null)
+            new("Client", "Key", null)
         };
 
         var result = metadata.GetString("Key");
@@ -62,7 +62,7 @@ public class EventMetadataExtensionsTests
         var dateTime = new DateTime(2024, 1, 15, 10, 30, 0, DateTimeKind.Utc);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("System", "Timestamp", dateTime)
+            new("System", "Timestamp", dateTime)
         };
 
         var result = metadata.GetDateTime("Timestamp");
@@ -77,12 +77,12 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("System", "Timestamp", jsonElement)
+            new("System", "Timestamp", jsonElement)
         };
 
         var result = metadata.GetDateTime("Timestamp");
         Assert.NotNull(result);
-        Assert.Equal(dateTime, result!.Value);
+        Assert.Equal(dateTime, result);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("System", "Timestamp", null)
+            new("System", "Timestamp", null)
         };
 
         var result = metadata.GetDateTime("Timestamp");
@@ -103,7 +103,7 @@ public class EventMetadataExtensionsTests
         var guid = Guid.NewGuid();
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "CorrelationId", guid)
+            new("Client", "CorrelationId", guid)
         };
 
         var result = metadata.GetGuid("CorrelationId");
@@ -118,7 +118,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "CorrelationId", jsonElement)
+            new("Client", "CorrelationId", jsonElement)
         };
 
         var result = metadata.GetGuid("CorrelationId");
@@ -130,7 +130,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Count", 42)
+            new("Client", "Count", 42)
         };
 
         var result = metadata.GetInt32("Count");
@@ -144,7 +144,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Count", jsonElement)
+            new("Client", "Count", jsonElement)
         };
 
         var result = metadata.GetInt32("Count");
@@ -156,7 +156,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "BigNumber", 1234567890L)
+            new("Client", "BigNumber", 1234567890L)
         };
 
         var result = metadata.GetInt64("BigNumber");
@@ -170,7 +170,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "BigNumber", jsonElement)
+            new("Client", "BigNumber", jsonElement)
         };
 
         var result = metadata.GetInt64("BigNumber");
@@ -182,7 +182,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Price", 99.99m)
+            new("Client", "Price", 99.99m)
         };
 
         var result = metadata.GetDecimal("Price");
@@ -196,7 +196,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Price", jsonElement)
+            new("Client", "Price", jsonElement)
         };
 
         var result = metadata.GetDecimal("Price");
@@ -208,7 +208,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Pi", 3.14159)
+            new("Client", "Pi", 3.14159)
         };
 
         var result = metadata.GetDouble("Pi");
@@ -222,7 +222,7 @@ public class EventMetadataExtensionsTests
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(json);
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "Pi", jsonElement)
+            new("Client", "Pi", jsonElement)
         };
 
         var result = metadata.GetDouble("Pi");
@@ -234,8 +234,8 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "IsActive", true),
-            new EventMetadata("Client", "IsDeleted", false)
+            new("Client", "IsActive", true),
+            new("Client", "IsDeleted", false)
         };
 
         Assert.True(metadata.GetBoolean("IsActive"));
@@ -249,8 +249,8 @@ public class EventMetadataExtensionsTests
         var jsonFalse = JsonSerializer.Deserialize<JsonElement>("false");
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "IsActive", jsonTrue),
-            new EventMetadata("Client", "IsDeleted", jsonFalse)
+            new("Client", "IsActive", jsonTrue),
+            new("Client", "IsDeleted", jsonFalse)
         };
 
         Assert.True(metadata.GetBoolean("IsActive"));
@@ -262,7 +262,7 @@ public class EventMetadataExtensionsTests
     {
         var metadata = new List<EventMetadata>
         {
-            new EventMetadata("Client", "IsActive", null)
+            new("Client", "IsActive", null)
         };
 
         var result = metadata.GetBoolean("IsActive");
