@@ -21,7 +21,7 @@ public sealed class EventStore(
 {
     private readonly EventStoreDbContext _context = context ?? throw new ArgumentNullException(nameof(context));
     private readonly ITypeMetadataRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-    private readonly Serialization.WireTypeSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly WireTypeSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
 
 
     /// <inheritdoc />
