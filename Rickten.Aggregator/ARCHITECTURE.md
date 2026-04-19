@@ -136,10 +136,14 @@ public async Task<(TState, StreamPointer, IReadOnlyList<StreamEvent>)> ExecuteAs
     // Step 4: ✅ VALIDATE FOLD (pre-append safety check) ✅
     var newState = repository.ValidateFold(state, events);
 
-    // Step 5: ✅ PERSIST EVENTS ✅
-    var appendedEvents = await repository.AppendEventsAsync(currentPointer, events, ct);
+    // Step 5: Filter metadata and wrap events for append
+    var filteredMetadata = metadata.Filter(expectedVersionKey);
+    var appendEvents = events.ToAppendEvent(filteredMetadata);
 
-    // Step 6: Save snapshot if at interval
+    // Step 6: ✅ PERSIST EVENTS ✅
+    var appendedEvents = await repository.AppendEventsAsync(currentPointer, appendEvents, ct);
+
+    // Step 7: Save snapshot if at interval
     var finalPointer = appendedEvents[^1].StreamPointer;
     await repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, ct);
 
