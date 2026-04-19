@@ -533,7 +533,7 @@ Test repository and executor with real event store:
 public async Task AggregateRepository_LoadStateAsync_LoadsFromSnapshot()
 {
     // Arrange: Create snapshot + events
-    await snapshotStore.SaveAsync(...);
+    await snapshotStore.SaveSnapshotAsync(snapshotPointer, snapshotState, ct);
     await eventStore.AppendAsync(...);
 
     // Act
