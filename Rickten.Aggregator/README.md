@@ -156,7 +156,7 @@ public sealed record SessionReviewState
 ```
 
 When `SnapshotInterval` > 0:
-- `AggregateCommandExecutor.ExecuteAsync` automatically saves snapshots at the configured interval when a `snapshotStore` is registered
+- `AggregateCommandExecutor.ExecuteAsync` automatically saves snapshots when append crosses interval boundary (when a `snapshotStore` is registered)
 - `AggregateRepository.LoadStateAsync` automatically loads from the latest snapshot when a `snapshotStore` is registered, reducing event replay
 
 This provides a complete optimization path for aggregates with long event histories.
@@ -499,12 +499,14 @@ var streamId = new StreamIdentifier("SessionReview", "session-1");
 var (state, pointer, events) = await executor.ExecuteAsync(
     streamId,
     command,
-    []); // Snapshot saved automatically at versions 50, 100, 150, etc.
+    []); // Snapshot saved automatically when append crosses/lands on interval boundary
 ```
 
 **Snapshot Behavior:**
 - `SnapshotInterval = 0` (default) - No automatic snapshots
-- `SnapshotInterval > 0` - Snapshots saved every N events
+- `SnapshotInterval > 0` - Snapshot saved when append crosses or lands on interval boundary
+- Snapshot is saved at the **final appended pointer** (not necessarily exact interval version)
+- Example: interval=50, append from v49→v51 saves snapshot at v51 (crossed boundary)
 - Snapshots only saved when `ISnapshotStore` is registered in DI
 - Idempotent commands (no events) don't trigger snapshots
 - Exposed via `StateFolder<TState>.SnapshotInterval` property

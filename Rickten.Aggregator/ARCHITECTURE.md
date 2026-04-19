@@ -435,8 +435,9 @@ public record OrderState { ... }
 
 **Automatic Behavior:**
 - Executor calls `repository.SaveSnapshotIfNeededAsync()` after persisting events
-- Repository checks: `if (newVersion % interval == 0) SaveSnapshot()`
-- Snapshots saved at versions: 50, 100, 150, 200, ...
+- Repository checks if append crossed or landed on an interval boundary
+- Snapshot saved at the **final appended pointer** when boundary is crossed
+- Example: interval=50, append from v49→v51 saves snapshot at v51
 - Load operations start from latest snapshot
 - Snapshots are **optional optimization** - events are source of truth
 
