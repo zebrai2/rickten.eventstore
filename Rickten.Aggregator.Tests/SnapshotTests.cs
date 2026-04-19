@@ -45,13 +45,13 @@ public class SnapshotTests
             var AggregateRepository = new AggregateRepository<TestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<TestState, TestCommand>(AggregateRepository, decider, registry);
 
-            var (state, version, events) = await executor.ExecuteAsync(
+            var (state, pointer, events) = await executor.ExecuteAsync(
                 streamId,
                 new TestCommand.Increment(),
                 metadata: []);
 
             Assert.Equal(1, state.Count);
-            Assert.Equal(1, version);
+            Assert.Equal(1, pointer.Version);
             Assert.Single(events);
         }
     }

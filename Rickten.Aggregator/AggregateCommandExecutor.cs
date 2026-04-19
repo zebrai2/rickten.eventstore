@@ -39,8 +39,8 @@ public class AggregateCommandExecutor<TState, TCommand>
     /// <param name="command">The command to execute.</param>
     /// <param name="metadata">Metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The new state, version, and appended events.</returns>
-    public async Task<(TState State, long Version, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
+    /// <returns>The new state, stream pointer, and appended events.</returns>
+    public async Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
         StreamIdentifier streamIdentifier,
         TCommand command,
         IReadOnlyList<AppendMetadata> metadata,
@@ -62,7 +62,7 @@ public class AggregateCommandExecutor<TState, TCommand>
         var events              = _decider.Execute(state, command);
         if (events.Count == 0)
         {
-            return (state, currentPointer.Version, []);
+            return (state, currentPointer, []);
         }
 
         var newState            = _repository.ValidateFold(state, events);
@@ -70,10 +70,10 @@ public class AggregateCommandExecutor<TState, TCommand>
         var appendEvents        = events.ToAppendEvent(filteredMetadata);
 
         var appendedEvents      = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
-        var finalVersion        = appendedEvents.LastVersion();
+        var finalPointer        = appendedEvents.LastVersion();
 
-        await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalVersion, cancellationToken);
-        return (newState, finalVersion.Version, appendedEvents);
+        await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, cancellationToken);
+        return (newState, finalPointer, appendedEvents);
     }
 
     /// <summary>

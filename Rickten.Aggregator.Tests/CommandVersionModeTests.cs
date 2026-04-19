@@ -55,7 +55,7 @@ public class CommandVersionModeTests
 
             // Assert
             Assert.Single(result.Events);
-            Assert.Equal(1, result.Version);
+            Assert.Equal(1, result.Pointer.Version);
         }
     }
 
@@ -86,7 +86,7 @@ public class CommandVersionModeTests
 
             // Assert
             Assert.Single(result.Events);
-            Assert.Equal(2, result.Version);
+            Assert.Equal(2, result.Pointer.Version);
         }
     }
 
@@ -214,7 +214,7 @@ public class CommandVersionModeTests
 
             // Assert
             Assert.Single(result.Events);
-            Assert.Equal(2, result.Version);
+            Assert.Equal(2, result.Pointer.Version);
         }
     }
 
@@ -245,7 +245,7 @@ public class CommandVersionModeTests
 
             // Assert
             Assert.Single(result.Events);
-            Assert.Equal(2, result.Version);
+            Assert.Equal(2, result.Pointer.Version);
         }
     }
 
@@ -276,7 +276,7 @@ public class CommandVersionModeTests
 
             // Assert: No events produced, but no error
             Assert.Empty(result.Events);
-            Assert.Equal(1, result.Version);
+            Assert.Equal(1, result.Pointer.Version);
         }
     }
 
@@ -413,7 +413,7 @@ public class CommandVersionModeTests
 
             // Assert
             Assert.Single(result.Events);
-            Assert.Equal(2, result.Version);
+            Assert.Equal(2, result.Pointer.Version);
         }
     }
 
@@ -449,7 +449,7 @@ public class CommandVersionModeTests
 
             // Assert: Event was appended successfully
             Assert.Single(result.Events);
-            Assert.Equal(2, result.Version);
+            Assert.Equal(2, result.Pointer.Version);
 
             // Load events from store to verify metadata
             var loadedEvents = new List<StreamEvent>();
