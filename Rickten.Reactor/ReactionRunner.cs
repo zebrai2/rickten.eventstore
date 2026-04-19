@@ -56,13 +56,11 @@ public static class ReactionRunner
     /// <typeparam name="TCommand">The command type to execute against target aggregates.</typeparam>
     /// <param name="eventStore">The event store to load events from.</param>
     /// <param name="projectionStore">The projection store for managing checkpoints (reactions use "reaction" namespace).</param>
-    /// <param name="reaction">The reaction to execute. The reaction owns its projection via the <see cref="Reaction{TView,TCommand}.Projection"/> property.</param>
+    /// <param name="reaction">The reaction to execute. The reaction name from the [Reaction] attribute is used for checkpoint keys. The reaction owns its projection via the <see cref="Reaction{TView,TCommand}.Projection"/> property.</param>
     /// <param name="executor">The aggregate command executor for executing commands against target aggregates. The executor is configured with folder, decider, registry, and snapshot store for the target aggregate type.</param>
-    /// <param name="reactionName">The name to use for storing the reaction checkpoints (defaults to reaction's name from [Reaction] attribute).</param>
     /// <param name="logger">Optional logger for diagnostic information. Recommended for production to detect checkpoint drift and rebuild scenarios.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The global position of the last successfully processed trigger event.</returns>
-    /// <exception cref="ArgumentException">Thrown when reaction name cannot be determined from parameter or attribute.</exception>
     /// <remarks>
     /// <para>
     /// <strong>Projection Ownership:</strong> The reaction conceptually owns its projection. If the projection has
@@ -79,18 +77,12 @@ public static class ReactionRunner
         IProjectionStore projectionStore,
         Reaction<TView, TCommand> reaction,
         AggregateCommandExecutor<TState, TCommand> executor,
-        string? reactionName = null,
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
-        // Determine reaction name
-        var name = reactionName ?? reaction.ReactionName;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new ArgumentException(
-                "Reaction name must be provided either via parameter or [Reaction] attribute",
-                nameof(reactionName));
-        }
+        // Reaction name is guaranteed by [Reaction] attribute (required constructor parameter)
+        // and validated during Reaction construction
+        var name = reaction.ReactionName;
 
         // Load reaction checkpoint (last trigger event successfully processed)
         // Stored as a projection with key "{reactionName}:trigger" in "reaction" namespace
