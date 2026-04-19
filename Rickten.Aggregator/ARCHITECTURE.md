@@ -367,12 +367,14 @@ User/API
 │                  │                            │
 │                  v                            │
 │  ┌────────────────────────────────────────┐  │
-│  │ 6. Snapshot (if at interval)           │  │
+│  │ 6. Snapshot (if boundary crossed)     │  │
 │  │    repository.SaveSnapshotIfNeeded()   │  │
 │  │    ↓                                   │  │
-│  │    ├─ Check if at snapshot interval    │  │
-│  │    └─ Save snapshot (using validated   │  │
-│  │       state from step 4)               │  │
+│  │    ├─ Check if crossed interval        │  │
+│  │    │  boundary (currentBoundary >      │  │
+│  │    │  previousBoundary)                │  │
+│  │    └─ Save snapshot at final pointer   │  │
+│  │       (using validated state from 4)   │  │
 │  └────────────────────────────────────────┘  │
 │                  │                            │
 │                  v                            │
