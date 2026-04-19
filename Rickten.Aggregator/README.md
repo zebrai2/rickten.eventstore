@@ -61,9 +61,10 @@ public interface IAggregateRepository<TState>
 
 **Architecture Principle: Validate Before Persist**
 - Events are the source of truth and must be **valid before persistence**
-- **ValidateFold** ensures events can be replayed without errors (pre-append safety check)
+- **ValidateFold** runs for every command that produces events (mandatory safety check)
+- ValidateFold ensures events can be replayed without errors before append
 - Events are persisted only after validation succeeds
-- State is derived from events and folded **only when needed** (for snapshots)
+- The validated state from ValidateFold is used for the command result and optional snapshots
 - This ensures data safety: invalid events are rejected before they corrupt the stream
 
 ### AggregateCommandExecutor<TState, TCommand>
@@ -86,9 +87,9 @@ public class AggregateCommandExecutor<TState, TCommand>
 1. Load current state from repository (events + snapshots)
 2. Validate expected version (if required by command)
 3. Execute command via decider to produce events
-4. **Validate fold** (ensure events can be replayed without errors)
+4. **Validate fold** (ensure events can be replayed without errors - returns new state)
 5. Persist events to event store (only after validation)
-6. Fold events and save snapshot if at interval (using already-validated state)
+6. Save snapshot if at interval (using the validated state from step 4)
 
 ### Base Classes (Recommended)
 
@@ -520,9 +521,10 @@ var (state, pointer, events) = await executor.ExecuteAsync(
 
 2. **Validate Before Persist**
    - Events are the source of truth and must be **valid before persistence**
-   - **ValidateFold** ensures events can be replayed without errors (pre-append safety check)
+   - **ValidateFold** runs for every command that produces events (mandatory safety check)
+   - ValidateFold ensures events can be replayed without errors before append
    - Events are persisted **only after validation succeeds**
-   - State is derived from events and computed **only when needed** (for snapshots)
+   - The validated state is used for command results and optional snapshots
    - This ensures data safety: invalid events are rejected before they corrupt the stream
 
 3. **Simplicity**
