@@ -47,7 +47,8 @@ public class SnapshotTests
 
             var (state, version, events) = await executor.ExecuteAsync(
                 streamId,
-                new TestCommand.Increment());
+                new TestCommand.Increment(),
+                metadata: []);
 
             Assert.Equal(1, state.Count);
             Assert.Equal(1, version);
@@ -76,7 +77,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new NoSnapshotCommand.Increment());
+                    new NoSnapshotCommand.Increment(),
+                    metadata: []);
             }
 
             // No snapshots should be saved
@@ -106,7 +108,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             // Should have snapshot at version 50
@@ -140,7 +143,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             var snapshot = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -170,7 +174,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             var snapshotBefore = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -179,7 +184,8 @@ public class SnapshotTests
             // Execute idempotent command (returns no events)
             await executor.ExecuteAsync(
                 streamId,
-                new TestCommand.Noop());
+                new TestCommand.Noop(),
+                metadata: []);
 
             // Should still be at version 25 (no new snapshot)
             var snapshotAfter = await snapshotStore.LoadSnapshotAsync(streamId);
@@ -209,7 +215,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             // Add 10 more events after the snapshot
@@ -217,7 +224,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             // Load state with snapshot - should start from version 50 snapshot
@@ -249,7 +257,8 @@ public class SnapshotTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new TestCommand.Increment());
+                    new TestCommand.Increment(),
+                    metadata: []);
             }
 
             // Load state without snapshot store - should load all events

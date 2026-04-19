@@ -162,7 +162,8 @@ public class TraceIdentityAggregatorTests : IDisposable
 
         var result = await executor.ExecuteAsync(
             streamId,
-            new CreateProduct("Widget", 10m));
+            new CreateProduct("Widget", 10m),
+            metadata: []);
 
         Assert.Equal(2, result.Events.Count);
 
@@ -187,7 +188,8 @@ public class TraceIdentityAggregatorTests : IDisposable
 
         var result = await executor.ExecuteAsync(
             streamId,
-            new CreateProduct("Widget", 10m));
+            new CreateProduct("Widget", 10m),
+            metadata: []);
 
         Assert.Equal(2, result.Events.Count);
 
@@ -213,14 +215,16 @@ public class TraceIdentityAggregatorTests : IDisposable
         // First command execution
         var result1 = await executor1.ExecuteAsync(
             streamId,
-            new CreateProduct("Widget", 10m));
+            new CreateProduct("Widget", 10m),
+            metadata: []);
 
         // Second command execution
         var changePriceDecider = new ChangePriceDecider();
         var executor2 = new AggregateCommandExecutor<ProductState, ChangePrice>(AggregateRepository, changePriceDecider, registry);
         var result2 = await executor2.ExecuteAsync(
             streamId,
-            new ChangePrice(15m));
+            new ChangePrice(15m),
+            metadata: []);
 
         var batchId1 = result1.Events[0].Metadata.GetBatchId();
         var batchId2 = result2.Events[0].Metadata.GetBatchId();

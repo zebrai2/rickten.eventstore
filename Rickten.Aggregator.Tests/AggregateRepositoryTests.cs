@@ -242,14 +242,14 @@ public class AggregateRepositoryTests
             var executor = new AggregateCommandExecutor<InvariantTestState, InvariantTestCommand>(AggregateRepository, decider, registry);
 
             // Create initial state
-            await executor.ExecuteAsync(streamId, new InvariantTestCommand());
+            await executor.ExecuteAsync(streamId, new InvariantTestCommand(), []);
 
             // Load state (version 1)
             var (state1, version1) = await AggregateRepository.LoadStateAsync(streamId);
             Assert.Equal(1, version1);
 
             // Execute another command to advance to version 2
-            await executor.ExecuteAsync(streamId, new InvariantTestCommand());
+            await executor.ExecuteAsync(streamId, new InvariantTestCommand(), []);
 
             // Try to execute using stale version 1 - should fail
             var stalePointer = new StreamPointer(streamId, version1);
@@ -277,7 +277,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
             // Act: Append events to new stream (version 0)
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),
@@ -308,11 +308,11 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
             // First append to establish version 1
-            var pointer1 = ((StreamPointer)streamId).WithVersion(0);
+            var pointer1 = ((StreamPointer)streamId) with { Version = 0 };
             await repository.AppendEventsAsync(pointer1, new[] { new AppendEvent(new InvariantTestEvent(), null) });
 
             // Act & Assert: Try to append with stale version 0
-            var stalePointer = ((StreamPointer)streamId).WithVersion(0);
+            var stalePointer = ((StreamPointer)streamId) with { Version = 0 };
             await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
             {
                 await repository.AppendEventsAsync(stalePointer, new[] { new AppendEvent(new InvariantTestEvent(), null) });
@@ -335,7 +335,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
             // Act: Append 5 events atomically
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = Enumerable.Range(0, 5)
                 .Select(_ => new AppendEvent(new InvariantTestEvent(), null))
                 .ToList();
@@ -370,7 +370,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
             // Act: Append empty list
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var appendedEvents = await repository.AppendEventsAsync(pointer, Array.Empty<AppendEvent>());
 
             // Assert
@@ -395,7 +395,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder);
 
             // Append events first
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),
@@ -430,7 +430,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
 
             // Append exactly 3 events (at snapshot boundary)
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = new[]
             {
                 new AppendEvent(new SnapshotTestEvent(), null),
@@ -469,7 +469,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<SnapshotTestState>(eventStore, folder, snapshotStore);
 
             // Append 2 events (not at snapshot boundary)
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = new[]
             {
                 new AppendEvent(new SnapshotTestEvent(), null),
@@ -505,7 +505,7 @@ public class AggregateRepositoryTests
             var repository = new AggregateRepository<InvariantTestState>(eventStore, folder); // No snapshot store
 
             // Append events
-            var pointer = ((StreamPointer)streamId).WithVersion(0);
+            var pointer = ((StreamPointer)streamId) with { Version = 0 };
             var events = new[]
             {
                 new AppendEvent(new InvariantTestEvent(), null),

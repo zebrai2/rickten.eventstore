@@ -66,7 +66,7 @@ public class AggregateRepository<TState> : IAggregateRepository<TState>
         }
 
         // Use implicit cast from StreamIdentifier to StreamPointer (version 0), then MoveTo starting version
-        var pointer = ((StreamPointer)streamIdentifier).WithVersion(version);
+        var pointer = ((StreamPointer)streamIdentifier) with { Version = version };
 
         await foreach (var streamEvent in _eventStore.LoadAsync(pointer, cancellationToken))
         {

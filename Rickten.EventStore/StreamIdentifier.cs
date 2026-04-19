@@ -13,4 +13,6 @@ public sealed record StreamIdentifier(
     /// </summary>
     public static implicit operator StreamPointer(StreamIdentifier identifier) =>
         new(identifier, 0);
+
+    public StreamPointer At(long version) => new(this, version);
 }

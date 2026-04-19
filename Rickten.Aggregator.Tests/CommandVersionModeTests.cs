@@ -51,7 +51,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Act: Execute command without ExpectedVersionKey (default behavior)
-            var result = await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            var result = await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Assert
             Assert.Single(result.Events);
@@ -76,7 +76,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create initial version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Execute with expected version in metadata
             var result = await executor.ExecuteAsync(
@@ -107,10 +107,10 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Advance to version 2
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act & Assert: Try to execute with stale expected version 1
             var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
@@ -149,7 +149,8 @@ public class CommandVersionModeTests
             {
                 await executor.ExecuteAsync(
                     streamId,
-                    new ExpectedVersionCommand("order-1"));
+                    new ExpectedVersionCommand("order-1"),
+                    metadata: []);
             });
 
             Assert.Contains("ExpectedVersion", exception.Message);
@@ -203,7 +204,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Pass int instead of long
             var result = await executor.ExecuteAsync(
@@ -234,7 +235,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Pass string that can be parsed as long
             var result = await executor.ExecuteAsync(
@@ -265,7 +266,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Execute idempotent command at expected version
             var result = await executor.ExecuteAsync(
@@ -297,14 +298,14 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Save snapshot at version 1
             var snapshotPointer = new StreamPointer(streamId, 1);
             await snapshotStore.SaveSnapshotAsync(snapshotPointer, new MetadataVersionTestState(1));
 
             // Advance to version 2
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act & Assert: Expected version check happens with snapshot loading
             var exception = await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
@@ -337,7 +338,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, trackingDecider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Reset tracking
             trackingDecider.ExecutedCommands.Clear();
@@ -402,7 +403,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Pass short instead of long
             var result = await executor.ExecuteAsync(
@@ -433,7 +434,7 @@ public class CommandVersionModeTests
             var executor = new AggregateCommandExecutor<MetadataVersionTestState, object>(AggregateRepository, decider, registry);
 
             // Create version 1
-            await executor.ExecuteAsync(streamId, new LatestVersionCommand());
+            await executor.ExecuteAsync(streamId, new LatestVersionCommand(), metadata: []);
 
             // Act: Execute with expected version + additional metadata
             var result = await executor.ExecuteAsync(

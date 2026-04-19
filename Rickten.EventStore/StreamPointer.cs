@@ -11,10 +11,4 @@ namespace Rickten.EventStore;
 /// </param>
 public sealed record StreamPointer(
     StreamIdentifier Stream,
-    long Version)
-{
-    public StreamPointer WithVersion(long version)
-    {
-        return this with { Version = version };
-    }
-}
+    long Version);
