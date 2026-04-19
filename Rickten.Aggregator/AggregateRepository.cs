@@ -70,9 +70,9 @@ public class AggregateRepository<TState>(
 
     private static void ValidateStreamVersion(StreamIdentifier streamIdentifier, StreamEvent streamEvent, long expectedVersion)
     {
-        if (streamEvent != expectedVersion)
+        if (streamEvent.StreamPointer != expectedVersion)
         {
-            if (streamEvent < expectedVersion)
+            if (streamEvent.StreamPointer < expectedVersion)
             {
                 throw new InvalidOperationException(
                     $"Duplicate or out-of-order event in stream {streamIdentifier.StreamType}/{streamIdentifier.Identifier}. " +
