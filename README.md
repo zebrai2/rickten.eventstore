@@ -8,7 +8,7 @@ A lightweight, flexible **Event Sourcing** library for .NET with Entity Framewor
 
 ## 📦 Packages
 
-This repository contains four NuGet packages:
+This repository contains five NuGet packages:
 
 ### **Rickten.EventStore**
 Core event sourcing abstractions and contracts. Provides `IEventStore`, `ISnapshotStore`, and `IProjectionStore` interfaces.
@@ -41,6 +41,24 @@ dotnet add package Rickten.Projector
 ```
 
 [📖 Read the Projector documentation →](Rickten.Projector/README.md)
+
+### **Rickten.Reactor**
+Event-driven command execution for Rickten. Build reactions that transform events into commands using projection-based stream selection.
+
+```bash
+dotnet add package Rickten.Reactor
+```
+
+[📖 Read the Reactor documentation →](Rickten.Reactor/README.md)
+
+### **Rickten.Runtime**
+Runtime host for Rickten reactions. Provides background services for continuous reaction execution in .NET Generic Host applications with DI, cancellation, logging, and failure handling.
+
+```bash
+dotnet add package Rickten.Runtime
+```
+
+[📖 Read the Runtime documentation →](Rickten.Runtime/README.md)
 
 ## 📋 Table of Contents
 

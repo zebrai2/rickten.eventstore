@@ -23,6 +23,14 @@ public sealed class ReactionAttribute(string name) : Attribute, ITypeMetadata
     public string[]? EventTypes { get; init; }
 
     /// <summary>
+    /// Gets or sets the polling interval in milliseconds for hosted reactions.
+    /// When running in Rickten.Runtime, this controls how frequently the reaction catches up.
+    /// Set to 0 (default) to use the runtime's default polling interval.
+    /// Must be a positive value or 0.
+    /// </summary>
+    public int PollingIntervalMilliseconds { get; init; } = 0;
+
+    /// <summary>
     /// Gets or sets a description of what this reaction does.
     /// </summary>
     public string? Description { get; init; }
