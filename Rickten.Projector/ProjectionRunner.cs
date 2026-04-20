@@ -41,6 +41,7 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             fromGlobalPosition,
             projection.AggregateTypeFilter,
             projection.EventTypeFilter,
+            untilGlobalPosition: null,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
@@ -70,21 +71,16 @@ public sealed class ProjectionRunner(IEventStore eventStore,
         var view = projection.InitialView();
         long lastGlobalPosition = fromGlobalPosition;
 
-        // Load events with optional filtering, stopping at untilGlobalPosition (inclusive)
+        // Load events with optional filtering up to untilGlobalPosition (inclusive)
         await foreach (var streamEvent in _eventStore.LoadAllAsync(
             fromGlobalPosition,
             projection.AggregateTypeFilter,
             projection.EventTypeFilter,
+            untilGlobalPosition,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
             lastGlobalPosition = streamEvent.GlobalPosition;
-
-            // Stop if we've reached the target position (inclusive)
-            if (streamEvent.GlobalPosition >= untilGlobalPosition)
-            {
-                break;
-            }
         }
 
         return (view, lastGlobalPosition);
@@ -147,6 +143,7 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             fromGlobalPosition,
             projection.AggregateTypeFilter,
             projection.EventTypeFilter,
+            untilGlobalPosition: null,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
@@ -204,16 +201,11 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             fromGlobalPosition,
             projection.AggregateTypeFilter,
             projection.EventTypeFilter,
+            untilGlobalPosition,
             cancellationToken))
         {
             view = projection.Apply(view, streamEvent);
             lastGlobalPosition = streamEvent.GlobalPosition;
-
-            // Stop if we've reached the target position (inclusive)
-            if (streamEvent.GlobalPosition >= untilGlobalPosition)
-            {
-                break;
-            }
         }
 
         // Save updated checkpoint if we processed any events

@@ -47,10 +47,16 @@ public sealed class EventStore(
         long fromGlobalPosition = 0,
         string[]? streamTypeFilter = null,
         string[]? eventsFilter = null,
+        long? untilGlobalPosition = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var query = _context.Events
             .Where(e => e.Id > fromGlobalPosition);
+
+        if (untilGlobalPosition.HasValue)
+        {
+            query = query.Where(e => e.Id <= untilGlobalPosition.Value);
+        }
 
         if (streamTypeFilter?.Length > 0)
         {
@@ -85,7 +91,7 @@ public sealed class EventStore(
 
         // Load streams for each filter
         var streams = filters.Select((filter, index) =>
-            LoadAllAsync(fromGlobalPosition, filter.streamTypeFilter, filter.eventsFilter, cancellationToken)
+            LoadAllAsync(fromGlobalPosition, filter.streamTypeFilter, filter.eventsFilter, untilGlobalPosition: null, cancellationToken)
         ).ToArray();
 
         // Use the extension method to merge, but we need to track which filter each stream came from
