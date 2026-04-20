@@ -87,53 +87,28 @@ public sealed class ProjectionRunner(IEventStore eventStore,
     }
 
     /// <summary>
-    /// Catches up a projection from its last checkpoint in the "system" namespace.
+    /// Catches up a projection from its last checkpoint.
     /// Loads the checkpoint from the projection store, applies new events, and saves the updated view.
     /// </summary>
     /// <typeparam name="TView">The view type.</typeparam>
     /// <param name="projection">The projection to apply.</param>
-    /// <param name="projectionName">The name to use for storing the projection (defaults to projection's name if available).</param>
+    /// <param name="namespace">The namespace for the projection (defaults to "system").</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The current view and checkpoint global position.</returns>
     public async Task<(TView View, long GlobalPosition)> CatchUpAsync<TView>(
         IProjection<TView> projection,
-        string? projectionName = null,
+        string @namespace = "system",
         CancellationToken cancellationToken = default)
     {
-        return await CatchUpAsync(projection, projectionName, "system", cancellationToken);
-    }
-
-    /// <summary>
-    /// Catches up a projection from its last checkpoint in a specific namespace.
-    /// Loads the checkpoint from the projection store, applies new events, and saves the updated view.
-    /// </summary>
-    /// <typeparam name="TView">The view type.</typeparam>
-    /// <param name="projection">The projection to apply.</param>
-    /// <param name="projectionName">The name to use for storing the projection (defaults to projection's name if available).</param>
-    /// <param name="namespace">The namespace for the projection.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The current view and checkpoint global position.</returns>
-    public async Task<(TView View, long GlobalPosition)> CatchUpAsync<TView>(
-        IProjection<TView> projection,
-        string? projectionName,
-        string @namespace,
-        CancellationToken cancellationToken = default)
-    {
-        // Determine projection name
-        var name = projectionName;
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrEmpty(projection.ProjectionName))
         {
-            name = projection.ProjectionName;
-        }
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new ArgumentException(
-                "Projection name must be provided either via parameter or [Projection] attribute",
-                nameof(projectionName));
+            throw new InvalidOperationException(
+                $"Projection '{projection.GetType().Name}' does not have a name. " +
+                "Apply [Projection(\"name\")] attribute to the projection class.");
         }
 
         // Load last checkpoint
-        var checkpoint = await _projectionStore.LoadProjectionAsync<TView>(name, @namespace, cancellationToken);
+        var checkpoint = await _projectionStore.LoadProjectionAsync<TView>(projection.ProjectionName, @namespace, cancellationToken);
         var view = checkpoint is not null ? checkpoint.State : projection.InitialView();
         var fromGlobalPosition = checkpoint?.GlobalPosition ?? 0;
 
@@ -153,7 +128,7 @@ public sealed class ProjectionRunner(IEventStore eventStore,
         // Save updated checkpoint if we processed any events
         if (lastGlobalPosition > fromGlobalPosition)
         {
-            await _projectionStore.SaveProjectionAsync(name, lastGlobalPosition, view, @namespace, cancellationToken);
+            await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
         }
 
         return (view, lastGlobalPosition);
@@ -166,32 +141,24 @@ public sealed class ProjectionRunner(IEventStore eventStore,
     /// <typeparam name="TView">The view type.</typeparam>
     /// <param name="projection">The projection to apply.</param>
     /// <param name="untilGlobalPosition">Process events up to and including this global position.</param>
-    /// <param name="projectionName">The name to use for storing the projection (defaults to projection's name if available).</param>
     /// <param name="namespace">The namespace for the projection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The projected view and the last processed global position.</returns>
     public async Task<(TView View, long GlobalPosition)> CatchUpUntilAsync<TView>(
         IProjection<TView> projection,
         long untilGlobalPosition,
-        string? projectionName = null,
         string @namespace = "system",
         CancellationToken cancellationToken = default)
     {
-        // Determine projection name
-        var name = projectionName;
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrEmpty(projection.ProjectionName))
         {
-            name = projection.ProjectionName;
-        }
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new ArgumentException(
-                "Projection name must be provided either via parameter or [Projection] attribute",
-                nameof(projectionName));
+            throw new InvalidOperationException(
+                $"Projection '{projection.GetType().Name}' does not have a name. " +
+                "Apply [Projection(\"name\")] attribute to the projection class.");
         }
 
         // Load last checkpoint
-        var checkpoint = await _projectionStore.LoadProjectionAsync<TView>(name, @namespace, cancellationToken);
+        var checkpoint = await _projectionStore.LoadProjectionAsync<TView>(projection.ProjectionName, @namespace, cancellationToken);
         var view = checkpoint is not null ? checkpoint.State : projection.InitialView();
         var fromGlobalPosition = checkpoint?.GlobalPosition ?? 0;
 
@@ -211,7 +178,7 @@ public sealed class ProjectionRunner(IEventStore eventStore,
         // Save updated checkpoint if we processed any events
         if (lastGlobalPosition > fromGlobalPosition)
         {
-            await _projectionStore.SaveProjectionAsync(name, lastGlobalPosition, view, @namespace, cancellationToken);
+            await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
         }
 
         return (view, lastGlobalPosition);
@@ -228,7 +195,6 @@ public sealed class ProjectionRunner(IEventStore eventStore,
     /// <param name="currentView">The current projection view state.</param>
     /// <param name="currentPosition">The current projection position.</param>
     /// <param name="targetPosition">The target position to synchronize to.</param>
-    /// <param name="projectionName">The name to use for loading the projection (defaults to projection's name if available).</param>
     /// <param name="namespace">The namespace for the projection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The synchronized view and position.</returns>
@@ -237,7 +203,6 @@ public sealed class ProjectionRunner(IEventStore eventStore,
         TView currentView,
         long currentPosition,
         long targetPosition,
-        string? projectionName = null,
         string @namespace = "system",
         CancellationToken cancellationToken = default)
     {
@@ -257,7 +222,6 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             return await CatchUpUntilAsync(
                 projection,
                 targetPosition,
-                projectionName,
                 @namespace,
                 cancellationToken);
         }

@@ -126,9 +126,7 @@ public class ProjectionRunnerTests : IDisposable
         ]);
 
         // First catch-up: process all events
-        var (firstView, firstCheckpoint) = await runner.CatchUpAsync(
-            projection,
-            "OrderCounter");
+        var (firstView, firstCheckpoint) = await runner.CatchUpAsync(projection);
 
         Assert.Equal(3, firstView.Count); // 3 events processed
         Assert.True(firstCheckpoint > 0);
@@ -147,9 +145,7 @@ public class ProjectionRunnerTests : IDisposable
         ]);
 
         // Second catch-up: should resume from checkpoint and process only new events
-        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(
-            projection,
-            "OrderCounter");
+        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(projection);
 
         // Critical assertion: should be 5 total (3 from before + 2 new)
         // If it replayed the checkpoint event, it would be 6
@@ -191,9 +187,7 @@ public class ProjectionRunnerTests : IDisposable
         Assert.True(firstCheckpoint > 0);
 
         // Second catch-up with no new events
-        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(
-            projection,
-            "NoUpdateTest");
+        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(projection);
 
         // Should return same view and checkpoint
         Assert.Equal(1, secondView.Count);
@@ -302,9 +296,7 @@ public class ProjectionRunnerTests : IDisposable
         ]);
 
         // First catch-up
-        var (firstView, _) = await runner.CatchUpAsync(
-            projection,
-            "EventTypeFilteredTest");
+        var (firstView, _) = await runner.CatchUpAsync(projection);
 
         Assert.Equal(1, firstView.Count); // Only Created event
 
