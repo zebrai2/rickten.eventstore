@@ -208,12 +208,23 @@ public sealed class ProjectionRunner(IEventStore eventStore,
 
         if (currentPosition < targetPosition)
         {
-            // Projection behind - catch up from checkpoint
-            return await CatchUpUntilAsync(
-                projection,
+            // Projection behind - advance from current state without reloading
+            // (caller manages their own checkpoint key)
+            var view = currentView;
+            var lastGlobalPosition = currentPosition;
+
+            await foreach (var streamEvent in _eventStore.LoadAllAsync(
+                currentPosition,
+                projection.AggregateTypeFilter,
+                projection.EventTypeFilter,
                 targetPosition,
-                @namespace,
-                cancellationToken);
+                cancellationToken))
+            {
+                view = projection.Apply(view, streamEvent);
+                lastGlobalPosition = streamEvent.GlobalPosition;
+            }
+
+            return (view, lastGlobalPosition);
         }
 
         // Equal - no action needed
