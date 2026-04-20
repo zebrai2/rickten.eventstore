@@ -186,8 +186,10 @@ public class ProjectionRunnerTests : IDisposable
         Assert.Equal(1, firstView.Count);
         Assert.True(firstCheckpoint > 0);
 
-        // Second catch-up with no new events
-        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(projection);
+        // Second catch-up with no new events (same namespace)
+        var (secondView, secondCheckpoint) = await runner.CatchUpAsync(
+            projection,
+            "NoUpdateTest");
 
         // Should return same view and checkpoint
         Assert.Equal(1, secondView.Count);
