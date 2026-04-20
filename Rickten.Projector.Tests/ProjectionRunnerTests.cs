@@ -400,6 +400,79 @@ public class ProjectionRunnerTests : IDisposable
         Assert.Contains("TestOrder", ex.Message);
         Assert.Contains("filter", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task CatchUpAsync_DifferentNamespaces_MaintainSeparateCheckpoints()
+    {
+        // Verifies that the same projection type in different namespaces
+        // maintains completely separate checkpoint state
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
+        var runner = _serviceProvider.GetRequiredService<ProjectionRunner>();
+        var projection = new OrderCounterProjection();
+
+        var stream = new StreamIdentifier("TestOrder", "namespace-test");
+
+        // Create initial events
+        await eventStore.AppendAsync(new StreamPointer(stream, 0),
+        [
+            new(new TestOrderCreatedEvent("order-1", 100m), null),
+            new(new TestOrderUpdatedEvent("order-1", "Pending"), null)
+        ]);
+
+        // Catch up in "system" namespace
+        var (systemView1, systemCheckpoint1) = await runner.CatchUpAsync(
+            projection,
+            "system");
+
+        Assert.Equal(2, systemView1.Count);
+        Assert.True(systemCheckpoint1 > 0);
+
+        // Catch up in "testing" namespace - should start from zero, not from system checkpoint
+        var (testingView1, testingCheckpoint1) = await runner.CatchUpAsync(
+            projection,
+            "testing");
+
+        Assert.Equal(2, testingView1.Count); // Processes all events, not from system checkpoint
+        Assert.Equal(systemCheckpoint1, testingCheckpoint1); // Same final position
+
+        // Add more events
+        await eventStore.AppendAsync(new StreamPointer(stream, 2),
+        [
+            new(new TestOrderCreatedEvent("order-2", 200m), null)
+        ]);
+
+        // Catch up system namespace - should process 1 new event
+        var (systemView2, systemCheckpoint2) = await runner.CatchUpAsync(
+            projection,
+            "system");
+
+        Assert.Equal(3, systemView2.Count); // 2 previous + 1 new
+        Assert.True(systemCheckpoint2 > systemCheckpoint1);
+
+        // Catch up testing namespace - should also process 1 new event
+        var (testingView2, testingCheckpoint2) = await runner.CatchUpAsync(
+            projection,
+            "testing");
+
+        Assert.Equal(3, testingView2.Count); // 2 previous + 1 new
+        Assert.Equal(systemCheckpoint2, testingCheckpoint2); // Same final position
+
+        // Verify both namespaces have separate stored checkpoints
+        var systemStored = await projectionStore.LoadProjectionAsync<OrderCounterState>(
+            "OrderCounter",
+            "system");
+        var testingStored = await projectionStore.LoadProjectionAsync<OrderCounterState>(
+            "OrderCounter",
+            "testing");
+
+        Assert.NotNull(systemStored);
+        Assert.NotNull(testingStored);
+        Assert.Equal(3, systemStored.State.Count);
+        Assert.Equal(3, testingStored.State.Count);
+        Assert.Equal(systemCheckpoint2, systemStored.GlobalPosition);
+        Assert.Equal(testingCheckpoint2, testingStored.GlobalPosition);
+    }
 }
 
 [Projection("EventTypeFiltered", EventTypes = new[] { "TestOrder.Created.v1" })]
