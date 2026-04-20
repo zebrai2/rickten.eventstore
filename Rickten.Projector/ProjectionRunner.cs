@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Rickten.EventStore;
 
 namespace Rickten.Projector;
@@ -11,14 +10,11 @@ namespace Rickten.Projector;
 /// </remarks>
 /// <param name="eventStore">The event store to load events from.</param>
 /// <param name="projectionStore">The projection store for loading/saving checkpoints.</param>
-/// <param name="logger">Optional logger for diagnostic information.</param>
 public sealed class ProjectionRunner(IEventStore eventStore,
-                                      IProjectionStore projectionStore,
-                                      ILogger<ProjectionRunner>? logger = null)
+                                      IProjectionStore projectionStore)
 {
-    private readonly IProjectionStore _projectionStore  = projectionStore;
-    private readonly IEventStore _eventStore            = eventStore;
-    private readonly ILogger<ProjectionRunner>? _logger = logger;
+    private readonly IProjectionStore _projectionStore = projectionStore;
+    private readonly IEventStore _eventStore           = eventStore;
     /// <summary>
     /// Rebuilds a projection from scratch starting at a specific global position.
     /// Does not save checkpoints - caller is responsible for persistence.
@@ -125,11 +121,8 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             lastGlobalPosition = streamEvent.GlobalPosition;
         }
 
-        // Save updated checkpoint if we processed any events
-        if (lastGlobalPosition > fromGlobalPosition)
-        {
-            await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
-        }
+        // Save checkpoint (even if no events processed, record we're caught up)
+        await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
 
         return (view, lastGlobalPosition);
     }
@@ -175,11 +168,8 @@ public sealed class ProjectionRunner(IEventStore eventStore,
             lastGlobalPosition = streamEvent.GlobalPosition;
         }
 
-        // Save updated checkpoint if we processed any events
-        if (lastGlobalPosition > fromGlobalPosition)
-        {
-            await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
-        }
+        // Save checkpoint (even if no events processed, record we're caught up)
+        await _projectionStore.SaveProjectionAsync(projection.ProjectionName, lastGlobalPosition, view, @namespace, cancellationToken);
 
         return (view, lastGlobalPosition);
     }
