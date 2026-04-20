@@ -162,20 +162,18 @@ public sealed class ReactionRunner(IEventStore eventStore,
                 }
 
                 lastReactionPosition = streamEvent.GlobalPosition;
-                await _reactionRepository.SaveCheckpointAsync(
-                    new ReactionCheckpoint(reaction.Name, lastReactionPosition, projectionPosition),
-                    cancellationToken);
+
+                await SaveReactionStateAsync(reaction.Name, lastReactionPosition, projectionPosition, projectionView, cancellationToken);
             }
         }
 
-        await _reactionRepository.SaveCheckpointAsync(
-            new ReactionCheckpoint(reaction.Name, lastReactionPosition, projectionPosition),
-            cancellationToken);
+        // Final save to persist projection-only updates
+        await SaveReactionStateAsync(reaction.Name, lastReactionPosition, projectionPosition, projectionView, cancellationToken);
 
         return lastReactionPosition;
     }
 
-    private ReactionCheckpoint CreateInitialState(string reactionName)
+    private static ReactionCheckpoint CreateInitialState(string reactionName)
     {
         return new ReactionCheckpoint(
                 ReactionName: reactionName,
@@ -217,5 +215,26 @@ public sealed class ReactionRunner(IEventStore eventStore,
                                     streamEvent.GlobalPosition, streamEvent.StreamPointer.Stream);
             }
         }
+    }
+
+    /// <summary>
+    /// Saves both the reaction checkpoint and the projection view to keep them in sync.
+    /// </summary>
+    private async Task SaveReactionStateAsync<TView>(
+        string reactionName,
+        long triggerPosition,
+        long projectionPosition,
+        TView projectionView,
+        CancellationToken cancellationToken)
+    {
+        await _reactionRepository.SaveCheckpointAsync(
+            new ReactionCheckpoint(reactionName, triggerPosition, projectionPosition),
+            cancellationToken);
+        await _projectionStore.SaveProjectionAsync(
+            reactionName,
+            projectionPosition,
+            projectionView,
+            "reaction",
+            cancellationToken);
     }
 }
