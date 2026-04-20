@@ -59,8 +59,8 @@ public static class ServiceCollectionExtensions
                 nameof(assemblies));
         }
 
-        // Register ReactionRunner as a singleton
-        services.TryAddSingleton<ReactionRunner>();
+        // Register ReactionRunner as scoped to match the lifetime of its EF-backed dependencies
+        services.TryAddScoped<ReactionRunner>();
 
         foreach (var reactionType in FindReactionTypes(assemblies))
         {
