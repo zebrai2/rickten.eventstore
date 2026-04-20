@@ -25,15 +25,18 @@ namespace Rickten.Reactor;
 /// </remarks>
 /// <param name="eventStore">The event store to load events from.</param>
 /// <param name="projectionStore">The projection store for managing projection state.</param>
+/// <param name="projectionRunner">The projection runner for managing projection state synchronization.</param>
 /// <param name="reactionRepository">The reaction repository for managing reaction checkpoints.</param>
 /// <param name="logger">Optional logger for diagnostic information.</param>
 public sealed class ReactionRunner(IEventStore eventStore,
                                    IProjectionStore projectionStore,
+                                   ProjectionRunner projectionRunner,
                                    IReactionRepository reactionRepository,
                                    ILogger<ReactionRunner>? logger = null)
 {
     private readonly IEventStore _eventStore = eventStore;
     private readonly IProjectionStore _projectionStore = projectionStore;
+    private readonly ProjectionRunner _projectionRunner = projectionRunner;
     private readonly IReactionRepository _reactionRepository = reactionRepository;
     private readonly ILogger<ReactionRunner>? _logger = logger;
 
@@ -104,9 +107,7 @@ public sealed class ReactionRunner(IEventStore eventStore,
                 reaction.Name, projectionPosition, reactionPosition, reactionPosition);
         }
 
-        (projectionView, projectionPosition) = await ProjectionRunner.SyncToPositionAsync(
-            _eventStore,
-            _projectionStore,
+        (projectionView, projectionPosition) = await _projectionRunner.SyncToPositionAsync(
             reaction.Projection,
             projectionView,
             projectionPosition,

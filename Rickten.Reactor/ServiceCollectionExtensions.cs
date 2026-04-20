@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Rickten.Projector;
 using System.Reflection;
 
 namespace Rickten.Reactor;
@@ -58,6 +59,9 @@ public static class ServiceCollectionExtensions
                 "Pass assemblies explicitly (e.g., typeof(MyReaction).Assembly) or use a marker-type overload (e.g., AddReactions<TMarker>).",
                 nameof(assemblies));
         }
+
+        // Register ProjectionRunner as scoped (required by ReactionRunner)
+        services.TryAddScoped<ProjectionRunner>();
 
         // Register ReactionRunner as scoped to match the lifetime of its EF-backed dependencies
         services.TryAddScoped<ReactionRunner>();

@@ -596,9 +596,11 @@ public class ReactionRunnerTests : IDisposable
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
 
         // Create runner with test logger
+        var projectionRunner = new ProjectionRunner(eventStore, projectionStore, null);
         var testRunner = new ReactionRunner(
             eventStore,
             projectionStore,
+            projectionRunner,
             reactionRepository,
             loggerFactory.CreateLogger<ReactionRunner>());
 
