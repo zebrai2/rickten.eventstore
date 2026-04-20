@@ -36,13 +36,11 @@ public record MembershipState(string MembershipId, int CalculationCount);
 /// <summary>
 /// Test state folder
 /// </summary>
-public class MembershipStateFolder : StateFolder<MembershipState>
+public class MembershipStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) : StateFolder<MembershipState>(registry)
 {
-    public MembershipStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) : base(registry) { }
+    public override MembershipState InitialState() => new("", 0);
 
-    public override MembershipState InitialState() => new MembershipState("", 0);
-
-    protected MembershipState When(MembershipRecalculatedEvent e, MembershipState state)
+    protected static MembershipState When(MembershipRecalculatedEvent e, MembershipState state)
     {
         return state with { MembershipId = e.MembershipId, CalculationCount = state.CalculationCount + 1 };
     }
@@ -64,6 +62,7 @@ public class MembershipCommandDecider : CommandDecider<MembershipState, Recalcul
 /// Projection view that maps definition IDs to affected membership stream identifiers
 /// In a real system, this would query a read model to find memberships using a definition
 /// </summary>
+[Rickten.Projector.Projection("MembershipDefinitionView")]
 public record MembershipDefinitionView(Dictionary<string, List<string>> DefinitionToMemberships);
 
 /// <summary>
@@ -72,8 +71,7 @@ public record MembershipDefinitionView(Dictionary<string, List<string>> Definiti
 [Rickten.Projector.Projection("MembershipDefinitionIndex")]
 public class MembershipDefinitionProjection : Rickten.Projector.Projection<MembershipDefinitionView>
 {
-    public override MembershipDefinitionView InitialView() => 
-        new MembershipDefinitionView(new Dictionary<string, List<string>>());
+    public override MembershipDefinitionView InitialView() => new([]);
 
     protected override MembershipDefinitionView ApplyEvent(MembershipDefinitionView view, StreamEvent streamEvent)
     {
@@ -85,26 +83,27 @@ public class MembershipDefinitionProjection : Rickten.Projector.Projection<Membe
         };
     }
 
-    private MembershipDefinitionView AddDefinition(MembershipDefinitionView view, string definitionId)
+    private static MembershipDefinitionView AddDefinition(MembershipDefinitionView view, string definitionId)
     {
         var map = new Dictionary<string, List<string>>(view.DefinitionToMemberships);
         if (!map.ContainsKey(definitionId))
         {
-            map[definitionId] = new List<string>();
+            map[definitionId] = [];
         }
         return view with { DefinitionToMemberships = map };
     }
 
-    private MembershipDefinitionView AddMembershipToDefinition(MembershipDefinitionView view, string definitionId, string membershipId)
+    private static MembershipDefinitionView AddMembershipToDefinition(MembershipDefinitionView view, string definitionId, string membershipId)
     {
         var map = new Dictionary<string, List<string>>(view.DefinitionToMemberships);
-        if (!map.ContainsKey(definitionId))
+        if (!map.TryGetValue(definitionId, out List<string>? value))
         {
-            map[definitionId] = new List<string>();
+            value = [];
+            map[definitionId] = value;
         }
-        if (!map[definitionId].Contains(membershipId))
+        if (!value.Contains(membershipId))
         {
-            map[definitionId].Add(membershipId);
+            value.Add(membershipId);
         }
         return view with { DefinitionToMemberships = map };
     }
@@ -113,13 +112,11 @@ public class MembershipDefinitionProjection : Rickten.Projector.Projection<Membe
 /// <summary>
 /// Example reaction from the spec - now with projection-based stream selection
 /// </summary>
-[Reaction("MembershipDefinitionChanged", EventTypes = new[] { "MembershipDefinition.Changed.v1" })]
-public sealed class MembershipDefinitionChangedReaction : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>
+[Reaction("MembershipDefinitionChanged", ["MembershipDefinition.Changed.v1"])]
+public sealed class MembershipDefinitionChangedReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+    : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>(registry)
 {
     private readonly MembershipDefinitionProjection _projection = new();
-
-    public MembershipDefinitionChangedReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
-        : base(registry) { }
 
     public override IProjection<MembershipDefinitionView> Projection => _projection;
 
@@ -150,13 +147,11 @@ public sealed class MembershipDefinitionChangedReaction : Reaction<MembershipDef
 /// <summary>
 /// Another example reaction for user registration - single stream case
 /// </summary>
-[Reaction("UserRegisteredReaction", EventTypes = new[] { "User.Registered.v1" })]
-public sealed class UserRegisteredReaction : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>
+[Reaction("UserRegisteredReaction", ["User.Registered.v1"])]
+public sealed class UserRegisteredReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+    : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>(registry)
 {
     private readonly MembershipDefinitionProjection _projection = new();
-
-    public UserRegisteredReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
-        : base(registry) { }
 
     public override IProjection<MembershipDefinitionView> Projection => _projection;
 
@@ -181,7 +176,7 @@ public sealed class UserRegisteredReaction : Reaction<MembershipDefinitionView, 
 /// </summary>
 public class InMemoryProjectionStore : IProjectionStore
 {
-    private readonly Dictionary<(string Namespace, string Key), object> _projections = new();
+    private readonly Dictionary<(string Namespace, string Key), object> _projections = [];
 
     public Task<EventStore.Projection<TState>?> LoadProjectionAsync<TState>(
         string projectionKey,
@@ -239,18 +234,17 @@ public class ReactionRunnerTests : IDisposable
 {
     private readonly Microsoft.Data.Sqlite.SqliteConnection _connection;
     private readonly IServiceProvider _serviceProvider;
-    private readonly InMemoryProjectionStore _projectionStore;
 
     public ReactionRunnerTests()
     {
         (_connection, _serviceProvider) = TestServiceFactory.CreateServiceProvider();
-        _projectionStore = new InMemoryProjectionStore();
     }
 
     public void Dispose()
     {
         _connection?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     [Fact]
@@ -265,35 +259,30 @@ public class ReactionRunnerTests : IDisposable
 
         // Create a definition
         var defStream = new StreamIdentifier("MembershipDefinition", "def-1");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-1", "Premium"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-1", "Premium"), null)
+        ]);
 
         // Register two users with this definition (creates memberships)
         var user1Stream = new StreamIdentifier("User", "user-1");
         var user2Stream = new StreamIdentifier("User", "user-2");
-        await eventStore.AppendAsync(new StreamPointer(user1Stream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-1", "user1@test.com", "def-1"), null)
-        });
-        await eventStore.AppendAsync(new StreamPointer(user2Stream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-2", "user2@test.com", "def-1"), null)
-        });
+        await eventStore.AppendAsync(user1Stream.At(0), [
+            new(new UserRegisteredEvent("user-1", "user1@test.com", "def-1"), null)
+        ]);
+        await eventStore.AppendAsync(user2Stream.At(0), [
+            new(new UserRegisteredEvent("user-2", "user2@test.com", "def-1"), null)
+        ]);
 
         // Change the definition again - this should trigger commands to both membership streams
-        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-1", "Premium Plus"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(1), [
+            new(new MembershipDefinitionChangedEvent("def-1", "Premium Plus"), null)
+        ]);
 
         // Act
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        var lastPosition = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        var lastPosition = await runner.CatchUpAsync(
             reaction,
             executor);
 
@@ -301,19 +290,21 @@ public class ReactionRunnerTests : IDisposable
         Assert.True(lastPosition > 0);
 
         // Verify checkpoint was saved
-        var checkpoint = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
-        Assert.Equal(lastPosition, checkpoint);
+        var reactionRepository = _serviceProvider.GetRequiredService<IReactionRepository>();
+        var savedCheckpoint = await reactionRepository.LoadCheckpointAsync("MembershipDefinitionChanged");
+        Assert.NotNull(savedCheckpoint);
+        Assert.Equal(lastPosition, savedCheckpoint.TriggerPosition);
 
         // Verify commands were executed against both membership streams
         var membership1Stream = new StreamIdentifier("Membership", "user-1");
-        var membership1Events = new List<StreamEvent>();
+        List<StreamEvent> membership1Events = [];
         await foreach (var evt in eventStore.LoadAsync(membership1Stream, CancellationToken.None))
         {
             membership1Events.Add(evt);
         }
 
         var membership2Stream = new StreamIdentifier("Membership", "user-2");
-        var membership2Events = new List<StreamEvent>();
+        List<StreamEvent> membership2Events = [];
         await foreach (var evt in eventStore.LoadAsync(membership2Stream, CancellationToken.None))
         {
             membership2Events.Add(evt);
@@ -336,42 +327,35 @@ public class ReactionRunnerTests : IDisposable
 
         // Create initial definition and user
         var defStream = new StreamIdentifier("MembershipDefinition", "def-2");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-2", "Basic"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-2", "Basic"), null)
+        ]);
 
         var userStream = new StreamIdentifier("User", "user-3");
-        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-3", "user3@test.com", "def-2"), null)
-        });
+        await eventStore.AppendAsync(userStream.At(0), [
+            new(new UserRegisteredEvent("user-3", "user3@test.com", "def-2"), null)
+        ]);
 
         // First definition change
-        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-2", "Standard"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(1), [
+            new(new MembershipDefinitionChangedEvent("def-2", "Standard"), null)
+        ]);
 
         // First catch-up
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        var firstPosition = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        var firstPosition = await runner.CatchUpAsync(
             reaction,
             executor);
 
         // Add another definition change
-        await eventStore.AppendAsync(new StreamPointer(defStream, 2), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-2", "Premium"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(2), [
+            new(new MembershipDefinitionChangedEvent("def-2", "Premium"), null)
+        ]);
 
         // Second catch-up
-        var secondPosition = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var secondPosition = await runner.CatchUpAsync(
             reaction,
             executor);
 
@@ -380,7 +364,7 @@ public class ReactionRunnerTests : IDisposable
 
         // Verify only 2 commands total (one for each definition change that matched)
         var membershipStream = new StreamIdentifier("Membership", "user-3");
-        var events = new List<StreamEvent>();
+        List<StreamEvent> events = [];
         await foreach (var evt in eventStore.LoadAsync(membershipStream, CancellationToken.None))
         {
             events.Add(evt);
@@ -401,30 +385,26 @@ public class ReactionRunnerTests : IDisposable
 
         // Create definition
         var defStream = new StreamIdentifier("MembershipDefinition", "def-3");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-3", "Gold"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-3", "Gold"), null)
+        ]);
 
         // Register user (this builds the projection mapping)
         var userStream = new StreamIdentifier("User", "user-4");
-        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-4", "user4@test.com", "def-3"), null)
-        });
+        await eventStore.AppendAsync(userStream.At(0), [
+            new(new UserRegisteredEvent("user-4", "user4@test.com", "def-3"), null)
+        ]);
 
         // Another definition change - this should now find the user and trigger a command
-        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-3", "Platinum"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(1), [
+            new(new MembershipDefinitionChangedEvent("def-3", "Platinum"), null)
+        ]);
 
         // Act - MembershipDefinitionChangedReaction only triggers on MembershipDefinition.Changed events
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        var lastPosition = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        var _ = await runner.CatchUpAsync(
             reaction,
             executor);
 
@@ -433,7 +413,7 @@ public class ReactionRunnerTests : IDisposable
         // Second definition change: 1 membership found (1 command)
         // Total: 1 command executed
         var membershipStream = new StreamIdentifier("Membership", "user-4");
-        var events = new List<StreamEvent>();
+        List<StreamEvent> events = [];
         await foreach (var evt in eventStore.LoadAsync(membershipStream, CancellationToken.None))
         {
             events.Add(evt);
@@ -455,38 +435,36 @@ public class ReactionRunnerTests : IDisposable
 
         // Create events
         var defStream = new StreamIdentifier("MembershipDefinition", "def-4");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-4", "Platinum"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-4", "Platinum"), null)
+        ]);
 
         var userStream = new StreamIdentifier("User", "user-2");
-        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-2", "user@test.com", "def-4"), null)
-        });
+        await eventStore.AppendAsync(userStream.At(0), [
+            new(new UserRegisteredEvent("user-2", "user@test.com", "def-4"), null)
+        ]);
 
         // Act - run both reactions
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        var pos1 = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        await runner.CatchUpAsync(
             reaction1,
             executor);
 
-        var pos2 = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        await runner.CatchUpAsync(
             reaction2,
             executor);
 
         // Assert - both should have processed their respective events
-        var checkpoint1 = _projectionStore.GetCheckpoint("MembershipDefinitionChanged");
-        var checkpoint2 = _projectionStore.GetCheckpoint("UserRegisteredReaction");
+        var reactionRepository = _serviceProvider.GetRequiredService<IReactionRepository>();
+        var checkpoint1 = await reactionRepository.LoadCheckpointAsync("MembershipDefinitionChanged");
+        var checkpoint2 = await reactionRepository.LoadCheckpointAsync("UserRegisteredReaction");
 
-        Assert.True(checkpoint1 > 0);
-        Assert.True(checkpoint2 > 0);
+        Assert.NotNull(checkpoint1);
+        Assert.True(checkpoint1.TriggerPosition > 0);
+        Assert.NotNull(checkpoint2);
+        Assert.True(checkpoint2.TriggerPosition > 0);
         // Checkpoints may differ based on event ordering
     }
 
@@ -522,23 +500,20 @@ public class ReactionRunnerTests : IDisposable
 
         // Create definition and user
         var defStream = new StreamIdentifier("MembershipDefinition", "def-rebuild");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-rebuild", "v1"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-rebuild", "v1"), null)
+        ]);
 
         var userStream = new StreamIdentifier("User", "user-rebuild");
-        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-rebuild", "user@test.com", "def-rebuild"), null)
-        });
+        await eventStore.AppendAsync(userStream.At(0), [
+            new(new UserRegisteredEvent("user-rebuild", "user@test.com", "def-rebuild"), null)
+        ]);
 
         // Create more definition changes
-        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-rebuild", "v2"), null),
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-rebuild", "v3"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(1), [
+            new(new MembershipDefinitionChangedEvent("def-rebuild", "v2"), null),
+            new(new MembershipDefinitionChangedEvent("def-rebuild", "v3"), null)
+        ]);
 
         // Simulate scenario: projection caught up to end, but reaction only processed first trigger
         // Manually set projection ahead of reaction
@@ -546,24 +521,26 @@ public class ReactionRunnerTests : IDisposable
         var firstTriggerPosition = 1L; // After first definition change
 
         // Build full projection state (as if it was caught up)
-        var fullView = new MembershipDefinitionView(new Dictionary<string, List<string>>());
+        var fullView = new MembershipDefinitionView([]);
         fullView = new MembershipDefinitionProjection().Apply(fullView, 
             new StreamEvent(new StreamPointer(defStream, 1), 1, 
-                new MembershipDefinitionChangedEvent("def-rebuild", "v1"), Array.Empty<EventMetadata>()));
+                new MembershipDefinitionChangedEvent("def-rebuild", "v1"), []));
         fullView = new MembershipDefinitionProjection().Apply(fullView,
             new StreamEvent(new StreamPointer(userStream, 1), 2,
-                new UserRegisteredEvent("user-rebuild", "user@test.com", "def-rebuild"), Array.Empty<EventMetadata>()));
+                new UserRegisteredEvent("user-rebuild", "user@test.com", "def-rebuild"), []));
 
         // Save checkpoints: projection ahead, reaction behind
-        await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:trigger", firstTriggerPosition, firstTriggerPosition, "reaction");
-        await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:projection", allEventsPosition, fullView, "reaction");
+        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
+        var reactionRepository = _serviceProvider.GetRequiredService<IReactionRepository>();
+        await reactionRepository.SaveCheckpointAsync(
+            new ReactionCheckpoint("MembershipDefinitionChanged", firstTriggerPosition, allEventsPosition));
+        await projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:projection", allEventsPosition, fullView, "reaction");
 
         // Act - catch up should rebuild projection to reaction position (1), then process triggers 2-3
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        var finalPosition = await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        var finalPosition = await runner.CatchUpAsync(
             reaction,
             executor);
 
@@ -572,7 +549,7 @@ public class ReactionRunnerTests : IDisposable
 
         // Verify commands were executed for triggers 2 and 3
         var membershipStream = new StreamIdentifier("Membership", "user-rebuild");
-        var events = new List<StreamEvent>();
+        List<StreamEvent> events = [];
         await foreach (var evt in eventStore.LoadAsync(membershipStream, CancellationToken.None))
         {
             events.Add(evt);
@@ -593,7 +570,7 @@ public class ReactionRunnerTests : IDisposable
         var decider = new MembershipCommandDecider();
 
         // Create a simple logger that captures log messages
-        var logMessages = new List<string>();
+        List<string> logMessages = [];
         var loggerFactory = LoggerFactory.Create(builder => 
         {
             builder.AddProvider(new TestLoggerProvider(logMessages));
@@ -602,30 +579,37 @@ public class ReactionRunnerTests : IDisposable
 
         // Create definition
         var defStream = new StreamIdentifier("MembershipDefinition", "def-log");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-log", "v1"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-log", "v1"), null)
+        ]);
 
         // Simulate projection ahead scenario
-        await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:trigger", 0, 0L, "reaction");
-        await _projectionStore.SaveProjectionAsync("MembershipDefinitionChanged:projection", 10, 
-            new MembershipDefinitionView(new Dictionary<string, List<string>>()), "reaction");
+        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
+        var reactionRepository = _serviceProvider.GetRequiredService<IReactionRepository>();
+        await reactionRepository.SaveCheckpointAsync(
+            new ReactionCheckpoint("MembershipDefinitionChanged", 0, 10));
+        await projectionStore.SaveProjectionAsync("MembershipDefinitionChanged", 10,
+            new MembershipDefinitionView([]), "reaction");
 
         // Act
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
-            reaction,
-            executor,
-            logger: logger);
 
-        // Assert - verify warning was logged
+        // Create runner with test logger
+        var testRunner = new ReactionRunner(
+            eventStore,
+            projectionStore,
+            reactionRepository,
+            loggerFactory.CreateLogger<ReactionRunner>());
+
+        await testRunner.CatchUpAsync(
+            reaction,
+            executor);
+
+        // Assert - verify warning was logged with useful details
         Assert.Contains(logMessages, msg => 
-            msg.Contains("projection is ahead of reaction checkpoint") &&
-            msg.Contains("Rebuilding projection"));
+            msg.Contains("projection drift detected") && 
+            msg.Contains("Rebuilding projection from scratch"));
     }
 
     [Fact]
@@ -640,36 +624,32 @@ public class ReactionRunnerTests : IDisposable
 
         // Create definition
         var defStream = new StreamIdentifier("MembershipDefinition", "def-metadata");
-        await eventStore.AppendAsync(new StreamPointer(defStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-metadata", "Premium"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(0), [
+            new(new MembershipDefinitionChangedEvent("def-metadata", "Premium"), null)
+        ]);
 
         // Register user with this definition
         var userStream = new StreamIdentifier("User", "user-metadata");
-        await eventStore.AppendAsync(new StreamPointer(userStream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new UserRegisteredEvent("user-metadata", "user@test.com", "def-metadata"), null)
-        });
+        await eventStore.AppendAsync(userStream.At(0), [
+            new(new UserRegisteredEvent("user-metadata", "user@test.com", "def-metadata"), null)
+        ]);
 
         // Change the definition - this should trigger a command
-        await eventStore.AppendAsync(new StreamPointer(defStream, 1), new List<AppendEvent>
-        {
-            new AppendEvent(new MembershipDefinitionChangedEvent("def-metadata", "Premium Plus"), null)
-        });
+        await eventStore.AppendAsync(defStream.At(1), [
+            new(new MembershipDefinitionChangedEvent("def-metadata", "Premium Plus"), null)
+        ]);
 
         // Act
         var AggregateRepository = new AggregateRepository<MembershipState>(eventStore, folder, NoOpSnapshotStore.Instance);
         var executor = new AggregateCommandExecutor<MembershipState, RecalculateMembershipCommand>(AggregateRepository, decider, registry);
-        await ReactionRunner.CatchUpAsync(
-            eventStore,
-            _projectionStore,
+        var runner = _serviceProvider.GetRequiredService<ReactionRunner>();
+        await runner.CatchUpAsync(
             reaction,
             executor);
 
         // Assert - verify reaction-produced events have ReactionWireName metadata
         var membershipStream = new StreamIdentifier("Membership", "user-metadata");
-        var events = new List<StreamEvent>();
+        List<StreamEvent> events = [];
         await foreach (var evt in eventStore.LoadAsync(membershipStream, CancellationToken.None))
         {
             events.Add(evt);
@@ -684,7 +664,6 @@ public class ReactionRunnerTests : IDisposable
         Assert.Equal("Reaction.MembershipDefinitionChanged.MembershipDefinitionChangedReaction", reactionWireName);
 
         // Also verify CorrelationId and CausationId are propagated
-        var correlationId = reactionEvent.Metadata.GetCorrelationId();
         var causationId = reactionEvent.Metadata.GetCausationId();
 
         // CausationId should be set to the trigger event's EventId
@@ -693,46 +672,36 @@ public class ReactionRunnerTests : IDisposable
 }
 
 // Simple test logger for capturing log messages
-public class TestLoggerProvider : ILoggerProvider
+public class TestLoggerProvider(List<string> messages) : ILoggerProvider
 {
-    private readonly List<string> _messages;
-
-    public TestLoggerProvider(List<string> messages)
+    public ILogger CreateLogger(string categoryName) => new TestLogger(messages);
+    public void Dispose()
     {
-        _messages = messages;
+        GC.SuppressFinalize(this);
     }
-
-    public ILogger CreateLogger(string categoryName) => new TestLogger(_messages);
-    public void Dispose() { }
 }
 
-public class TestLogger : ILogger
+public class TestLogger(List<string> messages) : ILogger
 {
-    private readonly List<string> _messages;
-
-    public TestLogger(List<string> messages)
-    {
-        _messages = messages;
-    }
-
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
     public bool IsEnabled(LogLevel logLevel) => true;
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        _messages.Add(formatter(state, exception));
+        if (IsEnabled(logLevel))
+        {
+            messages.Add(formatter(state, exception));
+        }
     }
 }
 
 /// <summary>
 /// Test reaction without attribute to verify error handling
 /// </summary>
-public class TestReactionWithoutAttribute : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>
+public class TestReactionWithoutAttribute(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+    : Reaction<MembershipDefinitionView, RecalculateMembershipCommand>(registry)
 {
     private readonly MembershipDefinitionProjection _projection = new();
-
-    public TestReactionWithoutAttribute(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
-        : base(registry) { }
 
     public override IProjection<MembershipDefinitionView> Projection => _projection;
 

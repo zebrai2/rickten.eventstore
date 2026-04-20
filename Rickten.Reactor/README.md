@@ -148,33 +148,63 @@ This ensures uniqueness even when multiple reactions share a logical name.
 
 ### Runner
 
+`ReactionRunner` is an instance-based service that orchestrates reaction execution:
+
 ```csharp
-public static class ReactionRunner
+public sealed class ReactionRunner
 {
-    public static Task<long> CatchUpAsync<TState, TView, TCommand>(
+    public ReactionRunner(
         IEventStore eventStore,
-        IProjectionStore projectionStore,  // Stores reaction checkpoints in "reaction" namespace
+        IProjectionStore projectionStore,
+        IReactionRepository reactionRepository,
+        ILogger<ReactionRunner>? logger = null);
+
+    public Task<long> CatchUpAsync<TState, TView, TCommand>(
         Reaction<TView, TCommand> reaction,
-        IStateFolder<TState> folder,
-        ICommandDecider<TState, TCommand> decider,
-        ISnapshotStore? snapshotStore = null,
-        string? reactionName = null,
-        ILogger? logger = null,  // Optional logging
+        AggregateCommandExecutor<TState, TCommand> executor,
         CancellationToken cancellationToken = default);
 }
 ```
 
-**Optional logging**: Pass an `ILogger` to receive diagnostic information:
+**Automatic logging**: The runner accepts an `ILogger<ReactionRunner>` in its constructor for diagnostic information:
 - ⚠️ **Warning**: When projection is ahead of reaction (indicates failure/recovery scenario)
-- ℹ️ **Info**: When projection is rebuilt for historical accuracy
+- 🔴 **Critical**: When event metadata is missing (CorrelationId or EventId)
+
+**Dependency Injection**: `ReactionRunner` is automatically registered as a singleton when calling `AddReactions`:
+
+```csharp
+services.AddReactions<MyReaction>();
+
+// ReactionRunner is now available for injection
+public class MyService
+{
+    private readonly ReactionRunner _runner;
+
+    public MyService(ReactionRunner runner)
+    {
+        _runner = runner;
+    }
+}
+```
 
 ### Checkpoint Storage
 
-Reactions use `IProjectionStore` with the `"reaction"` namespace to store:
-- **Reaction checkpoint** (`{reactionName}:trigger`) - Last trigger event processed
-- **Projection checkpoint** (`{reactionName}:projection`) - Last event applied to reaction's private projection
+Reactions use two separate storage mechanisms:
 
-This enables sharing the same database infrastructure with public projections (which use the `"system"` namespace) while maintaining logical separation.
+1. **`IReactionRepository`** - Stores execution checkpoints:
+   - Reaction name
+   - Trigger position (last processed trigger event)
+   - Projection position (how far projection was caught up)
+
+2. **`IProjectionStore`** (with `"reaction"` namespace) - Stores projection view state:
+   - Reaction name as key
+   - Materialized projection view
+   - Global position
+
+This separation enables:
+- ✅ Independent checkpoint management
+- ✅ Efficient projection catch-up on drift
+- ✅ Shared infrastructure with public projections (different namespace)
 
 ## Example
 
@@ -253,61 +283,168 @@ public sealed class MembershipDefinitionChangedReaction
 
 ## Execution Model
 
-`ReactionRunner.CatchUpAsync` behavior:
+`ReactionRunner.CatchUpAsync` orchestrates the following:
 
-1. **Load checkpoints** from `IProjectionStore` (using "reaction" namespace):
-   - Reaction checkpoint (`{name}:trigger`): last trigger event successfully processed
-   - Projection checkpoint (`{name}:projection`): last event applied to reaction's private projection
-2. **Read events** from `IEventStore.LoadAllAsync`:
-   - Start from `Min(reactionPosition, projectionPosition)`
-   - Use projection's aggregate/event type filters for efficiency
-3. **For each event**:
-   - **Always** apply projection events (respecting projection filters) if newer than projection checkpoint
-   - **If event is a trigger** (matches `EventTypeFilter` and newer than reaction checkpoint):
-     - Call `reaction.SelectStreams(projectionView, trigger)` to get target streams
-     - For each selected stream:
-       - Call `reaction.BuildCommand(stream, projectionView, trigger)`
-       - Execute command through `StateRunner.ExecuteAsync`
-     - **After all commands succeed**, save both checkpoints
-4. **Return** final processed position
+1. **Load checkpoints**:
+   - Reaction checkpoint from `IReactionRepository` (trigger and projection positions)
+   - Projection view from `IProjectionStore` (using "reaction" namespace)
+2. **Synchronize projection** to reaction position if drift detected:
+   - If projection ahead: Rebuild from scratch to reaction position
+   - If projection behind: Catch up from checkpoint to reaction position
+   - Uses `ProjectionRunner.SyncToPositionAsync` internally
+3. **Process new events** from `IEventStore.LoadAllAsync`:
+   - Merge projection events and trigger events by global position
+   - Apply projection events to update view incrementally
+4. **For each trigger event**:
+   - Call `reaction.SelectStreams(projectionView, trigger)` to get target streams
+   - For each selected stream:
+     - Call `reaction.BuildCommand(stream, projectionView, trigger)`
+     - Execute command through `AggregateCommandExecutor`
+   - Save reaction checkpoint after all commands succeed
+5. **Save final checkpoint** with updated positions
 
 ### Reaction-Owned Projection State
 
-**Key insight**: Each reaction maintains its **own private projection state**, stored in `IProjectionStore` using the `"reaction"` namespace.
+**Key insight**: Each reaction maintains its **own private projection state**, stored separately from the reaction checkpoint.
 
-- **Public projections**: Use `ProjectionRunner.CatchUpAsync(eventStore, publicProjectionStore, projection, ...)` with default `"system"` namespace
-- **Reaction projections**: The reaction uses the same `IProjection<TView>` but stores state in the `"reaction"` namespace
+- **`IReactionRepository`**: Stores execution state (trigger position, projection position)
+- **`IProjectionStore`** (reaction namespace): Stores the materialized projection view
+- **Public projections**: Use `ProjectionRunner.CatchUpAsync` with "system" namespace
+- **Reaction projections**: Same `IProjection<TView>` interface but stored in "reaction" namespace
 
 **Benefits:**
-- ✅ No API pollution - `ProjectionRunner` stays clean
-- ✅ No dangerous methods to misuse
+- ✅ Clean separation - checkpoint positions vs view state
 - ✅ Performance - projection filters work normally
 - ✅ Independence - public and reaction projections have separate lifecycles
-- ✅ Simplicity - projection state is managed transparently by the runner
-- ✅ Shared infrastructure - same database table, separated by namespace
+- ✅ Simplicity - projection state managed transparently by the runner
+- ✅ Shared infrastructure - same database, different namespace
 
 **The projection view always represents deterministic state** because:
-1. It's caught up incrementally as events stream in
-2. When a trigger event is processed, the projection already reflects all prior events
-3. The view naturally represents state "up to and including" the trigger event
+1. It's synchronized to the reaction position before processing begins
+2. When a trigger event is processed, the projection reflects all prior events
+3. The view represents state "up to and including" the trigger event
 
 ## Checkpoint Semantics
 
-**Two checkpoints per reaction:**
+**Separate checkpoint storage:**
 
-1. **Reaction checkpoint**: Last trigger event successfully processed
-   - Advances only after **all** commands for a trigger succeed
-   - If any command fails, reaction checkpoint is **not** saved
+1. **Reaction checkpoint** (in `IReactionRepository`):
+   - Stores: Reaction name, trigger position, projection position
+   - Saved after **all** commands for a trigger succeed
+   - If any command fails, checkpoint is **not** saved
 
-2. **Projection checkpoint**: Last event applied to reaction's private projection
-   - Advances as events are applied to the projection
-   - Saved when reaction checkpoint is saved (kept in sync)
-   - Enables efficient catch-up (don't rebuild projection from scratch)
+2. **Projection view** (in `IProjectionStore` with "reaction" namespace):
+   - Stores: Materialized projection state at a specific position
+   - Saved during sync step by `ProjectionRunner.SyncToPositionAsync`
+   - Not saved after each trigger (sync handles it on restart if needed)
 
 **Guarantees:**
 - At-least-once delivery (trigger events may be reprocessed after failure)
 - Commands **must be idempotent** (replay may occur after partial execution)
-- Projection state is always consistent with or ahead of reaction progress
+- Projection state can be behind reaction checkpoint (sync catches it up on startup)
+
+## At-Least-Once Delivery and Idempotency
+
+**⚠️ Critical: Commands produced by reactions may be executed multiple times.**
+
+Reactions provide **at-least-once delivery** semantics:
+- If a reaction crashes after executing some commands but before saving its checkpoint, those commands will be re-executed on restart
+- If a command execution fails partway through a batch, the entire batch may be retried
+- Network failures, process restarts, or exceptions can all trigger re-execution
+
+### Required: Idempotent Command Design
+
+**All commands executed by reactions MUST be idempotent.** This means:
+
+✅ **Safe to execute multiple times with the same result**
+```csharp
+// Good: Set absolute state
+new UpdateUserStatus(userId, status: "Active");
+
+// Good: Use conditional logic in decider
+if (state.Status != "Active") {
+    yield return new UserStatusChangedEvent(userId, "Active");
+}
+```
+
+❌ **NOT safe if dependent on execution count**
+```csharp
+// Bad: Increment counter (executes twice = wrong count)
+new IncrementCounter(userId);
+
+// Bad: Add to collection without deduplication
+new AddItem(userId, item);
+```
+
+### Design Strategies
+
+1. **Use absolute state commands** - Set values rather than apply deltas
+2. **Check current state in deciders** - Only emit events if state actually changes
+3. **Use correlation/causation IDs** - Detect and skip duplicate executions
+4. **Design aggregates for idempotency** - Make state transitions naturally idempotent
+
+### Example: Idempotent Recalculation
+
+```csharp
+// Command is safe to execute multiple times
+protected override RecalculateMembershipCommand BuildCommand(
+    StreamIdentifier stream,
+    MembershipDefinitionView view,
+    StreamEvent trigger)
+{
+    return new RecalculateMembershipCommand(
+        stream.Identifier,
+        definitionVersion: ((MembershipDefinitionChangedEvent)trigger.Event).Version);
+}
+
+// Decider checks version before emitting events
+public IEnumerable<object> Decide(MembershipState state, RecalculateMembershipCommand command)
+{
+    // Only recalculate if definition version has actually changed
+    if (state.DefinitionVersion == command.DefinitionVersion)
+    {
+        yield break; // Already processed this version
+    }
+
+    yield return new MembershipRecalculatedEvent(
+        state.MembershipId,
+        command.DefinitionVersion,
+        newValue: CalculateValue(state, command));
+}
+```
+
+### Checkpoint Recovery
+
+On startup after a crash:
+1. **Sync step** detects if projection is behind reaction checkpoint
+2. **Projection is caught up** to reaction position using `ProjectionRunner`
+3. **Reaction resumes** from last saved checkpoint
+4. **Unconfirmed triggers are reprocessed** - commands may execute again
+
+This is why idempotency is non-negotiable.
+
+### Projection Checkpoint Frequency
+
+**Projection state is only saved during the sync step, not after processing each trigger.**
+
+If a reaction crashes mid-processing:
+- Reaction checkpoint remains at the last successfully processed trigger
+- Projection checkpoint may be behind (not saved yet)
+- On restart, the sync step catches up the projection before processing resumes
+
+**Performance consideration**: The sync step rebuilds or catches up the projection to match the reaction checkpoint. For reactions that process many projection events between triggers:
+
+💡 **Recommendation**: Configure your `IProjectionStore` implementation with a **batch size of 1** for reaction projections (those in the "reaction" namespace). This ensures projection checkpoints are saved frequently during the sync step, minimizing the amount of work needed on recovery.
+
+Example with Entity Framework implementation:
+```csharp
+services.AddProjectionStore(options => 
+{
+    options.BatchSize = 1; // Save after every event during sync
+});
+```
+
+This trades a small amount of write throughput for faster crash recovery and more granular checkpointing.
 
 ## Metadata Propagation
 
@@ -395,10 +532,11 @@ This keeps reactions simple and composable.
 ## Philosophy
 
 Rickten.Reactor follows Rickten's design principles:
-- **Small primitives**: Base class, attribute, runner, store
+- **Small primitives**: Base class, attribute, runner service, repositories
 - **Explicit dependencies**: Reaction owns its projection
-- **Static runners**: `ReactionRunner` is a static utility; reactions themselves can be DI-registered
-- **Explicit persistence**: `IProjectionStore` interface with `"reaction"` namespace
+- **Instance-based runner**: `ReactionRunner` is a DI-registered service with injected dependencies
+- **Separate checkpoint concerns**: `IReactionRepository` for positions, `IProjectionStore` for views
+- **Explicit persistence**: Clear interfaces with namespace separation
 - **No hosting concerns**: Mechanism, not framework
 
-A future hosting/daemon project may call `ReactionRunner.CatchUpAsync` repeatedly, but that is out of scope for Rickten.Reactor itself.
+`Rickten.Runtime` provides hosted services that call `ReactionRunner.CatchUpAsync` repeatedly in polling loops.

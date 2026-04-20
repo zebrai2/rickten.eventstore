@@ -1,8 +1,10 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Rickten.Aggregator;
 using Rickten.EventStore;
+using Rickten.EventStore.EntityFramework;
 using Rickten.Projector;
 using Rickten.Reactor;
 using Rickten.TestUtils;
@@ -73,7 +75,7 @@ public class TestProjection : Rickten.Projector.Projection<TestProjectionView>
 }
 
 // Test reaction with polling interval in attribute
-[Reaction("TestReaction", EventTypes = new[] { "TestAggregate.Triggered.v1" }, PollingIntervalMilliseconds = 100)]
+[Reaction("TestReaction", ["TestAggregate.Triggered.v1"], PollingIntervalMilliseconds = 100)]
 public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
 {
     private readonly TestProjection _projection;
@@ -101,7 +103,7 @@ public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
 }
 
 // Test reaction without polling interval (uses default)
-[Reaction("DefaultIntervalReaction", EventTypes = new[] { "TestAggregate.Triggered.v1" })]
+[Reaction("DefaultIntervalReaction", ["TestAggregate.Triggered.v1"])]
 public class DefaultIntervalReaction : Reaction<TestProjectionView, ProcessTestCommand>
 {
     private readonly TestProjection _projection;
@@ -277,10 +279,16 @@ public class ReactionHostedServiceTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddLogging();
-        services.AddSingleton(_connection);
+
+        // Register EventStore infrastructure (including IReactionRepository)
+        services.AddEventStore(options =>
+        {
+            options.UseSqlite(_connection);
+        }, typeof(TestReaction).Assembly);
+
+        // Override with shared instances from test fixture
         services.AddSingleton<IEventStore>(eventStore);
         services.AddSingleton<IProjectionStore>(_projectionStore);
-        services.AddSingleton(_serviceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>());
 
         services.AddReactions(typeof(TestReaction).Assembly);
 

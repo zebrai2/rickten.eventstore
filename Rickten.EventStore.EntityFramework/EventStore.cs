@@ -72,6 +72,83 @@ public sealed class EventStore(
         }
     }
 
+    /// <inheritdoc />
+    public async IAsyncEnumerable<(StreamEvent Event, int[] MatchingFilters)> LoadAllMergedAsync(
+        long fromGlobalPosition,
+        (string[]? streamTypeFilter, string[]? eventsFilter)[] filters,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (filters.Length == 0)
+        {
+            yield break;
+        }
+
+        // Load streams for each filter
+        var streams = filters.Select((filter, index) =>
+            LoadAllAsync(fromGlobalPosition, filter.streamTypeFilter, filter.eventsFilter, cancellationToken)
+        ).ToArray();
+
+        // Use the extension method to merge, but we need to track which filter each stream came from
+        // Since we need to know ALL matching filters for each event, we'll do this manually
+        var enumerators = streams.Select(s => s.GetAsyncEnumerator(cancellationToken)).ToArray();
+        var hasMore = new bool[filters.Length];
+
+        try
+        {
+            // Initialize all enumerators
+            for (int i = 0; i < enumerators.Length; i++)
+            {
+                hasMore[i] = await enumerators[i].MoveNextAsync();
+            }
+
+            while (hasMore.Any(h => h))
+            {
+                // Find the minimum position among all active streams
+                long minPosition = long.MaxValue;
+                for (int i = 0; i < enumerators.Length; i++)
+                {
+                    if (hasMore[i])
+                    {
+                        var pos = enumerators[i].Current.GlobalPosition;
+                        if (pos < minPosition)
+                        {
+                            minPosition = pos;
+                        }
+                    }
+                }
+
+                // Collect all filters that have this position
+                var matchingFilterIndices = new List<int>();
+                StreamEvent? eventToYield = null;
+
+                for (int i = 0; i < enumerators.Length; i++)
+                {
+                    if (hasMore[i] && enumerators[i].Current.GlobalPosition == minPosition)
+                    {
+                        if (eventToYield == null)
+                        {
+                            eventToYield = enumerators[i].Current;
+                        }
+                        matchingFilterIndices.Add(i);
+                        hasMore[i] = await enumerators[i].MoveNextAsync();
+                    }
+                }
+
+                if (eventToYield != null)
+                {
+                    yield return (eventToYield, [.. matchingFilterIndices]);
+                }
+            }
+        }
+        finally
+        {
+            foreach (var enumerator in enumerators)
+            {
+                await enumerator.DisposeAsync();
+            }
+        }
+    }
+
     private static List<EventMetadata> TransformAppendMetadata(IReadOnlyList<AppendMetadata>? appendMetadata)
     {
         var metadata = new List<EventMetadata>();

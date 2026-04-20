@@ -151,7 +151,7 @@ public class ReactionWithoutAttribute : Reaction<TestView, TestCommand>
 
 // Test reactions for registration
 
-[Reaction("TestReaction")]
+[Reaction("TestReaction", ["Test.Event.v1"])]
 public class TestRegisteredReaction : Reaction<TestView, TestCommand>
 {
     private readonly TestProjection _projection = new();
@@ -171,7 +171,7 @@ public class TestRegisteredReaction : Reaction<TestView, TestCommand>
     }
 }
 
-[Reaction("AnotherReaction")]
+[Reaction("AnotherReaction", ["Test.Event.v1"])]
 public class AnotherRegisteredReaction : Reaction<TestView, TestCommand>
 {
     private readonly TestProjection _projection = new();

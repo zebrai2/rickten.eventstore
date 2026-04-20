@@ -76,7 +76,9 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
         // Look up handler method for this event type
         if (_info.Handlers.TryGetValue(eventType, out var handler))
         {
-            return (TState)handler.Invoke(this, [@event, state])!;
+            // Use null target for static methods, 'this' for instance methods
+            var target = handler.IsStatic ? null : this;
+            return (TState)handler.Invoke(target, [@event, state])!;
         }
 
         // No handler found - return state unchanged
@@ -107,7 +109,8 @@ public abstract class StateFolder<TState> : IStateFolder<TState>
         var handlers = new Dictionary<Type, MethodInfo>();
 
         // Find all protected methods named "When" with signature: TState When(EventType, TState)
-        var methods = implementationType.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+        // Support both static and instance methods
+        var methods = implementationType.GetMethods(BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
             .Where(m => m.Name == "When" && m.ReturnType == typeof(TState));
 
         foreach (var method in methods)
