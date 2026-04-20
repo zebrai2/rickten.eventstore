@@ -25,12 +25,14 @@ public interface IEventStore
     /// <param name="fromGlobalPosition">The global position to start loading after (exclusive). Defaults to 0 (beginning).</param>
     /// <param name="streamTypeFilter">Optional filter to include only specific stream types.</param>
     /// <param name="eventsFilter">Optional filter to include only specific event types.</param>
+    /// <param name="untilGlobalPosition">Optional upper bound (inclusive). Only events with global position &lt;= this value are returned. Null means no upper limit.</param>
     /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
     /// <returns>An async enumerable of stream events from all matching streams.</returns>
     IAsyncEnumerable<StreamEvent> LoadAllAsync(
         long fromGlobalPosition = 0,
         string[]? streamTypeFilter = null,
         string[]? eventsFilter = null,
+        long? untilGlobalPosition = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

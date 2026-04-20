@@ -32,6 +32,9 @@ public static class TestServiceFactory
             options.UseSqlite(connection);
         }, typeof(TestServiceFactory).Assembly);
 
+        // Register ProjectionRunner
+        services.AddProjectionRunner();
+
         var serviceProvider = services.BuildServiceProvider();
 
         // Create the database schema
