@@ -16,30 +16,26 @@ namespace Rickten.Runtime;
 /// <typeparam name="TState">The aggregate state type.</typeparam>
 /// <typeparam name="TView">The projection view type.</typeparam>
 /// <typeparam name="TCommand">The command type.</typeparam>
-internal class ReactionHostedService<TReaction, TState, TView, TCommand> : BackgroundService
+internal class ReactionHostedService<TReaction, TState, TView, TCommand>(
+    IServiceScopeFactory scopeFactory,
+    IOptions<RicktenRuntimeOptions> options,
+    ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> logger,
+    TimeSpan? pollingInterval = null) : BackgroundService
     where TReaction : Reaction<TView, TCommand>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> _logger;
-    private readonly TimeSpan _pollingInterval;
-
-    public ReactionHostedService(
-        IServiceScopeFactory scopeFactory,
-        IOptions<RicktenRuntimeOptions> options,
-        ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> logger,
-        TimeSpan? pollingInterval = null)
-    {
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _pollingInterval = pollingInterval ?? options.Value.DefaultPollingInterval;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+    private readonly ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly TimeSpan _pollingInterval = pollingInterval ?? options.Value.DefaultPollingInterval;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var reactionName = typeof(TReaction).Name;
-        _logger.LogInformation(
-            "Starting hosted reaction '{ReactionName}' with polling interval {PollingInterval}",
-            reactionName, _pollingInterval);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "Starting hosted reaction '{ReactionName}' with polling interval {PollingInterval}",
+                reactionName, _pollingInterval);
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -47,36 +43,41 @@ internal class ReactionHostedService<TReaction, TState, TView, TCommand> : Backg
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
 
-                var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-                var projectionStore = scope.ServiceProvider.GetRequiredService<IProjectionStore>();
+                var runner = scope.ServiceProvider.GetRequiredService<ReactionRunner>();
                 var reaction = scope.ServiceProvider.GetRequiredService<TReaction>();
                 var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<TState, TCommand>>();
 
-                var position = await ReactionRunner.CatchUpAsync(
-                    eventStore,
-                    projectionStore,
+                var position = await runner.CatchUpAsync(
                     reaction,
                     executor,
-                    logger: _logger,
-                    cancellationToken: stoppingToken);
+                    stoppingToken);
 
-                _logger.LogDebug(
-                    "Hosted reaction '{ReactionName}' caught up to position {Position}",
-                    reactionName, position);
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug(
+                        "Hosted reaction '{ReactionName}' caught up to position {Position}",
+                        reactionName, position);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogInformation(
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
                     "Hosted reaction '{ReactionName}' stopping due to cancellation",
                     reactionName);
+                }
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Hosted reaction '{ReactionName}' failed during catch-up. Will retry after {PollingInterval}",
-                    reactionName, _pollingInterval);
+                if (_logger.IsEnabled(LogLevel.Error))
+                {
+                    _logger.LogError(
+                        ex,
+                        "Hosted reaction '{ReactionName}' failed during catch-up. Will retry after {PollingInterval}",
+                        reactionName, _pollingInterval);
+                }
             }
 
             try
@@ -85,15 +86,21 @@ internal class ReactionHostedService<TReaction, TState, TView, TCommand> : Backg
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogInformation(
-                    "Hosted reaction '{ReactionName}' stopping during delay",
-                    reactionName);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Hosted reaction '{ReactionName}' stopping during delay",
+                        reactionName);
+                }
                 break;
             }
         }
 
-        _logger.LogInformation(
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
             "Hosted reaction '{ReactionName}' stopped",
             reactionName);
+        }
     }
 }

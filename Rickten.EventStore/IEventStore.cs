@@ -34,6 +34,19 @@ public interface IEventStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Loads events from multiple filter configurations and merges them by global position.
+    /// When the same event matches multiple filters, it is yielded once with all matching filter indices.
+    /// </summary>
+    /// <param name="fromGlobalPosition">The global position to start loading after (exclusive).</param>
+    /// <param name="filters">Array of filter configurations (streamTypeFilter, eventsFilter). Each tuple represents a separate query.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>An async enumerable of tuples containing the event and array of matching filter indices.</returns>
+    IAsyncEnumerable<(StreamEvent Event, int[] MatchingFilters)> LoadAllMergedAsync(
+        long fromGlobalPosition,
+        (string[]? streamTypeFilter, string[]? eventsFilter)[] filters,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Appends events to a stream with optimistic concurrency control.
     /// </summary>
     /// <param name="expectedVersion">

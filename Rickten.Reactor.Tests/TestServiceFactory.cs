@@ -32,6 +32,9 @@ public static class TestServiceFactory
             options.UseSqlite(connection);
         }, typeof(TestServiceFactory).Assembly);
 
+        // Register reactions (also registers ReactionRunner)
+        services.AddReactions(typeof(TestServiceFactory).Assembly);
+
         var serviceProvider = services.BuildServiceProvider();
 
         // Create the database schema

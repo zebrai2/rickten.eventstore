@@ -59,6 +59,9 @@ public static class ServiceCollectionExtensions
                 nameof(assemblies));
         }
 
+        // Register ReactionRunner as a singleton
+        services.TryAddSingleton<ReactionRunner>();
+
         foreach (var reactionType in FindReactionTypes(assemblies))
         {
             var reactionBaseType = FindReactionBaseType(reactionType)

@@ -32,6 +32,11 @@ public sealed class EventStoreDbContext : DbContext
     /// </summary>
     public DbSet<ProjectionEntity> Projections { get; set; } = null!;
 
+    /// <summary>
+    /// Gets or sets the reactions table.
+    /// </summary>
+    public DbSet<ReactionEntity> Reactions { get; set; } = null!;
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -133,6 +138,27 @@ public sealed class EventStoreDbContext : DbContext
                 .HasMaxLength(255);
 
             entity.Property(e => e.State)
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAt)
+                .IsRequired()
+                .HasDefaultValueSql(utcNowSql);
+        });
+
+        // Configure ReactionEntity
+        modelBuilder.Entity<ReactionEntity>(entity =>
+        {
+            entity.ToTable("Reactions");
+            entity.HasKey(e => e.ReactionName);
+
+            entity.Property(e => e.ReactionName)
+                .IsRequired()
+                .HasMaxLength(255);
+
+            entity.Property(e => e.TriggerPosition)
+                .IsRequired();
+
+            entity.Property(e => e.ProjectionPosition)
                 .IsRequired();
 
             entity.Property(e => e.UpdatedAt)

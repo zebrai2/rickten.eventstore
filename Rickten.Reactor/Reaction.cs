@@ -42,7 +42,7 @@ public abstract class Reaction<TView, TCommand>
     /// <summary>
     /// Gets the reaction name from the [Reaction] attribute.
     /// </summary>
-    public string ReactionName => _reactionInfo.Name;
+    public string Name => _reactionInfo.Name;
 
     /// <summary>
     /// Gets the wire name of this reaction.
