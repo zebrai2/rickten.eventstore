@@ -73,7 +73,7 @@ public class TestProjection : Rickten.Projector.Projection<TestProjectionView>
 
 // Test reaction with polling interval in attribute
 [Reaction("TestReaction", ["TestAggregate.Triggered.v1"], PollingIntervalMilliseconds = 100)]
-public class TestReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+public class TestReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry)
     : Reaction<TestProjectionView, ProcessTestCommand>(registry)
 {
     private readonly TestProjection _projection = new();
@@ -305,7 +305,8 @@ public class ReactionHostedServiceTests : IDisposable
         var signalingWaiter = new TestUtils.SignalingWaiter();
         services.AddSingleton<IWaiter>(signalingWaiter);
 
-        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
+        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>(
+            pollingInterval: TimeSpan.FromMilliseconds(50));
 
         var provider = services.BuildServiceProvider();
 
@@ -342,6 +343,10 @@ public class ReactionHostedServiceTests : IDisposable
 
         Assert.Contains(events, e => e.Event is TestTriggeredEvent);
         Assert.Contains(events, e => e.Event is TestProcessedEvent);
+
+        // Verify the polling interval was used
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
     [Fact]
@@ -423,6 +428,10 @@ public class ReactionHostedServiceTests : IDisposable
         }
 
         Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "DefaultReacted");
+
+        // Verify the default interval (50ms) was used, not the attribute value
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
     [Fact]
@@ -504,6 +513,10 @@ public class ReactionHostedServiceTests : IDisposable
         }
 
         Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "Reacted");
+
+        // Verify the parameter override (50ms) was used, not the attribute value (100ms)
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
     [Fact]

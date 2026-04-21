@@ -1,18 +1,27 @@
 namespace Rickten.TestUtils;
 
 /// <summary>
-/// A test waiter that signals when an iteration completes, allowing tests to synchronize.
+/// A test waiter that signals when an iteration completes and captures the polling interval.
 /// </summary>
 public sealed class SignalingWaiter : Runtime.IWaiter
 {
     private readonly TaskCompletionSource<bool> _signal = new();
+    private TimeSpan? _capturedDuration;
 
     /// <summary>
-    /// Completes instantly but signals that an iteration has completed.
+    /// Gets the duration that was passed to WaitAsync, or null if not yet called.
+    /// </summary>
+    public TimeSpan? CapturedDuration => _capturedDuration;
+
+    /// <summary>
+    /// Completes instantly but signals that an iteration has completed and captures the duration.
     /// </summary>
     public async Task WaitAsync(TimeSpan duration, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Capture the duration on first call
+        _capturedDuration ??= duration;
 
         // Signal that an iteration completed
         _signal.TrySetResult(true);
