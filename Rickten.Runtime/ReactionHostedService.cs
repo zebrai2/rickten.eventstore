@@ -83,7 +83,7 @@ internal class ReactionHostedService<TReaction, TState, TView, TCommand>(
 
             try
             {
-                await Task.Delay(_pollingInterval, stoppingToken);
+                await _waiter.WaitAsync(_pollingInterval, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

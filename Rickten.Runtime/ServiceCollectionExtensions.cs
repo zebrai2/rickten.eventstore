@@ -44,6 +44,9 @@ public static class ServiceCollectionExtensions
 
         services.Configure(configure);
 
+        // Register default time abstraction (can be overridden in tests)
+        services.TryAddSingleton<IWaiter, SystemWaiter>();
+
         return services;
     }
 

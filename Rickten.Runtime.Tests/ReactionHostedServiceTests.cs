@@ -244,6 +244,7 @@ public class ReactionHostedServiceTests : IDisposable
 
         // Start and stop cleanly
         await host.StartAsync(cts.Token);
+        await Task.Yield(); // Allow background task to start
         manualWaiter.AdvanceTime(); // Advance time instead of real delay
         cts.Cancel();
         await host.StopAsync(CancellationToken.None);
@@ -332,17 +333,21 @@ public class ReactionHostedServiceTests : IDisposable
         // Start the host
         await host.StartAsync(cts.Token);
 
-        // Poll for the processed event (no real delays, just manual time advancement)
+        // Poll for the processed event (deterministic time control)
         var processedEventFound = false;
         var attempts = 0;
         var maxAttempts = 20;
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            // Give the background task multiple opportunities to run
-            await Task.Delay(10); // Small real delay to allow task scheduling
-            manualWaiter.AdvanceTime(); // Advance time to complete any waits
-            await Task.Delay(5); // Allow processing to complete
+            // Small real delay for .NET thread scheduler (not for time - ManualWaiter controls that)
+            await Task.Delay(1);
+
+            // Advance manual time to complete the polling wait instantly
+            manualWaiter.AdvanceTime();
+
+            // Another small delay for async state machine execution
+            await Task.Delay(1);
 
             // Check via a new scope to avoid DbContext concurrency
             using (var checkScope = provider.CreateScope())
@@ -452,9 +457,14 @@ public class ReactionHostedServiceTests : IDisposable
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            await Task.Delay(10);
+            // Small real delay for .NET thread scheduler (not for time - ManualWaiter controls that)
+            await Task.Delay(1);
+
+            // Advance manual time to complete the polling wait instantly
             manualWaiter.AdvanceTime();
-            await Task.Delay(5);
+
+            // Another small delay for async state machine execution
+            await Task.Delay(1);
 
             using (var checkScope = provider.CreateScope())
             {
@@ -553,9 +563,14 @@ public class ReactionHostedServiceTests : IDisposable
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            await Task.Delay(10);
+            // Small real delay for .NET thread scheduler (not for time - ManualWaiter controls that)
+            await Task.Delay(1);
+
+            // Advance manual time to complete the polling wait instantly
             manualWaiter.AdvanceTime();
-            await Task.Delay(5);
+
+            // Another small delay for async state machine execution
+            await Task.Delay(1);
 
             using (var checkScope = provider.CreateScope())
             {
