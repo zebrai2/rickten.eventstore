@@ -312,7 +312,7 @@ When `Stateless = true`:
 | Feature | Stateful (default) | Stateless |
 |---------|-------------------|-----------|
 | **State Loading** | ✅ Loads all events + snapshots | ❌ Skipped - uses initial state |
-| **Expected Version** | ✅ Validates if `ExpectedVersionKey` set | ❌ Ignored even if set |
+| **Expected Version** | ✅ Validates if `ExpectedVersionKey` set | ✅ Validates if `ExpectedVersionKey` set |
 | **Fold Validation** | ✅ Validates events can be folded before append | ❌ Skipped - trusts decider output |
 | **Optimistic Concurrency** | ✅ Version checked on append | ✅ Version checked on append |
 | **Decider Receives** | Current aggregate state | Initial state |
@@ -325,7 +325,9 @@ When `Stateless = true`:
 
 3. **State Parameter**: The command decider receives `InitialState()` instead of the current aggregate state. Design your decider to work with this.
 
-4. **Concurrency Still Protected**: The event store still enforces optimistic concurrency on append - concurrent appends will conflict even for stateless commands.
+4. **Expected Version Still Enforced**: If you set `ExpectedVersionKey` on a stateless command, version checking still happens - only state loading and fold validation are skipped.
+
+5. **Concurrency Still Protected**: The event store still enforces optimistic concurrency on append - concurrent appends will conflict even for stateless commands.
 
 ### Example: Stateless Audit Log
 

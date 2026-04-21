@@ -36,7 +36,7 @@ public class AggregateCommandExecutor<TState, TCommand>
     /// Executes a command against an aggregate stream.
     /// Workflow: load state, validate expected version (if required), execute command via decider, 
     /// validate fold (pre-append safety check), append events, and optionally save snapshots.
-    /// For stateless commands: skip state loading, expected version validation, and fold validation.
+    /// For stateless commands: skip state loading and fold validation, but still enforce expected version if configured.
     /// </summary>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
@@ -50,30 +50,12 @@ public class AggregateCommandExecutor<TState, TCommand>
         CancellationToken cancellationToken = default)
     {
         var isStateless = IsStatelessCommand(command);
-
-        if (isStateless)
-        {
-            return await ExecuteStatelessCommandAsync(streamIdentifier, command, metadata, cancellationToken);
-        }
-        else
-        {
-            return await ExecuteStatefulCommandAsync(streamIdentifier, command, metadata, cancellationToken);
-        }
-    }
-
-    /// <summary>
-    /// Executes a stateful command with full state loading, validation, and fold checks.
-    /// </summary>
-    private async Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteStatefulCommandAsync(
-        StreamIdentifier streamIdentifier,
-        TCommand command,
-        IReadOnlyList<AppendMetadata> metadata,
-        CancellationToken cancellationToken)
-    {
-        var (state, currentPointer) = await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
+        var (state, currentPointer) = isStateless
+            ? (_repository.GetInitialState(), await _repository.GetCurrentPointerAsync(streamIdentifier, cancellationToken))
+            : await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
 
         var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata);
-        if (expectedVersion.HasValue && currentPointer != expectedVersion.Value)
+        if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
         {
             var expectedPointer = streamIdentifier.At(expectedVersion.Value);
             throw new StreamVersionConflictException(
@@ -83,48 +65,27 @@ public class AggregateCommandExecutor<TState, TCommand>
                 $"The aggregate has changed since the decision was made.");
         }
 
-        var events              = _decider.Execute(state, command);
+        var events = _decider.Execute(state, command);
         if (events.Count == 0)
         {
             return (state, currentPointer, []);
         }
 
-        var newState            = _repository.ValidateFold(state, events);
-        var filteredMetadata    = metadata.Filter(expectedVersionKey);
-        var appendEvents        = events.ToAppendEvent(filteredMetadata);
+        var newState = isStateless 
+                ? state 
+                : _repository.ValidateFold(state, events);
 
-        var appendedEvents      = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
-        var finalPointer        = appendedEvents.LastVersion();
+        var filteredMetadata = metadata.Filter(expectedVersionKey);
+        var appendEvents = events.ToAppendEvent(filteredMetadata);
+        var appendedEvents = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
+        var finalPointer = appendedEvents.LastVersion();
 
-        await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, cancellationToken);
-        return (newState, finalPointer, appendedEvents);
-    }
-
-    /// <summary>
-    /// Executes a stateless command without loading state, skipping expected version and fold validation.
-    /// Still loads the current stream pointer to correctly append events with optimistic concurrency.
-    /// </summary>
-    private async Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteStatelessCommandAsync(
-        StreamIdentifier streamIdentifier,
-        TCommand command,
-        IReadOnlyList<AppendMetadata> metadata,
-        CancellationToken cancellationToken)
-    {
-        var initialState        = _repository.GetInitialState();
-        var currentPointer      = await _repository.GetCurrentPointerAsync(streamIdentifier, cancellationToken);
-
-        var events              = _decider.Execute(initialState, command);
-        if (events.Count == 0)
+        if (!isStateless)
         {
-            return (initialState, currentPointer, []);
+            await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, cancellationToken);
         }
 
-        var appendEvents        = events.ToAppendEvent(metadata);
-
-        var appendedEvents      = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
-        var finalPointer        = appendedEvents.LastVersion();
-
-        return (initialState, finalPointer, appendedEvents);
+        return (newState, finalPointer, appendedEvents);
     }
 
     /// <summary>

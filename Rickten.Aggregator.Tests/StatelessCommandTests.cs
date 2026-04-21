@@ -7,7 +7,8 @@ namespace Rickten.Aggregator.Tests;
 
 /// <summary>
 /// Tests for stateless command execution.
-/// Verifies that stateless commands skip state loading, expected version validation, and fold validation.
+/// Verifies that stateless commands skip state loading and fold validation,
+/// but still enforce expected version when configured via ExpectedVersionKey.
 /// </summary>
 public class StatelessCommandTests
 {
@@ -160,7 +161,7 @@ public class StatelessCommandTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_StatelessCommand_IgnoresExpectedVersionKey()
+    public async Task ExecuteAsync_StatelessCommand_WithoutExpectedVersionKey_AppendsRegardlessOfVersion()
     {
         // Arrange
         var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
@@ -171,20 +172,81 @@ public class StatelessCommandTests
             var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
             var folder = new StatelessTestStateFolder(registry);
             var decider = new StatelessTestDecider();
-            var streamId = new StreamIdentifier("StatelessTest", "version-ignore-test");
+            var streamId = new StreamIdentifier("StatelessTest", "no-version-test");
             var repository = new AggregateRepository<StatelessTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
             var executor = new AggregateCommandExecutor<StatelessTestState, object>(repository, decider, registry);
 
             // Create version 1
             await executor.ExecuteAsync(streamId, new StatelessCommand("data-1"), metadata: []);
 
-            // Act: Execute stateless command with wrong expected version - should NOT throw
+            // Act: Execute stateless command without ExpectedVersionKey - should always succeed
+            var result = await executor.ExecuteAsync(
+                streamId,
+                new StatelessCommand("data-2"),
+                metadata: []);
+
+            // Assert: Command executed successfully at any current version
+            Assert.Single(result.Events);
+            Assert.Equal(2, result.Pointer.Version);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StatelessCommand_WithExpectedVersionKey_EnforcesVersion()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new StatelessTestStateFolder(registry);
+            var decider = new StatelessTestDecider();
+            var streamId = new StreamIdentifier("StatelessTest", "version-enforce-stateless-test");
+            var repository = new AggregateRepository<StatelessTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
+            var executor = new AggregateCommandExecutor<StatelessTestState, object>(repository, decider, registry);
+
+            // Create version 1
+            await executor.ExecuteAsync(streamId, new StatelessCommand("data-1"), metadata: []);
+
+            // Act & Assert: Execute stateless command with wrong expected version - should throw
+            await Assert.ThrowsAsync<StreamVersionConflictException>(async () =>
+            {
+                await executor.ExecuteAsync(
+                    streamId,
+                    new StatelessCommandWithExpectedVersion("data-2"),
+                    metadata: [new AppendMetadata("ExpectedVersion", 999L)]);
+            });
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StatelessCommand_WithExpectedVersionKey_SucceedsWhenVersionMatches()
+    {
+        // Arrange
+        var (connection, serviceProvider) = TestServiceFactory.CreateServiceProvider();
+        using (connection)
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>();
+            var folder = new StatelessTestStateFolder(registry);
+            var decider = new StatelessTestDecider();
+            var streamId = new StreamIdentifier("StatelessTest", "version-match-stateless-test");
+            var repository = new AggregateRepository<StatelessTestState>(eventStore, folder, NoOpSnapshotStore.Instance);
+            var executor = new AggregateCommandExecutor<StatelessTestState, object>(repository, decider, registry);
+
+            // Create version 1
+            await executor.ExecuteAsync(streamId, new StatelessCommand("data-1"), metadata: []);
+
+            // Act: Execute stateless command with correct expected version - should succeed
             var result = await executor.ExecuteAsync(
                 streamId,
                 new StatelessCommandWithExpectedVersion("data-2"),
-                metadata: [new AppendMetadata("ExpectedVersion", 999L)]);
+                metadata: [new AppendMetadata("ExpectedVersion", 1L)]);
 
-            // Assert: Command executed despite wrong expected version
+            // Assert: Command executed successfully
             Assert.Single(result.Events);
             Assert.Equal(2, result.Pointer.Version);
         }
