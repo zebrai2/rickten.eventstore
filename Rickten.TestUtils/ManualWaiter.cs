@@ -45,9 +45,16 @@ public sealed class ManualWaiter : IWaiter
     }
 
     /// <summary>
-    /// Advances time and completes all pending waits.
+    /// Advances time and completes all pending waits instantly.
     /// This allows tests to control when delays complete without real waiting.
     /// </summary>
+    /// <remarks>
+    /// Note: After calling AdvanceTime(), tests must still yield control to allow
+    /// the .NET task scheduler to execute continuations. A minimal Task.Delay(1)
+    /// is typically needed to give background tasks time to process the completed wait.
+    /// This is unavoidable in async testing - we control WHEN waits complete (via AdvanceTime),
+    /// but the scheduler still needs real time to execute the continuation chains.
+    /// </remarks>
     public void AdvanceTime()
     {
         List<PendingWait> waitsToComplete;
