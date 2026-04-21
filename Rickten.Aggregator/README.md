@@ -60,12 +60,13 @@ public interface IAggregateRepository<TState>
 ```
 
 **Architecture Principle: Validate Before Persist**
-- Events are the source of truth and must be **valid before persistence**
-- **ValidateFold** runs for every command that produces events (mandatory safety check)
+- Events are the source of truth and must be **valid before persistence** (for stateful commands)
+- **ValidateFold** runs for every stateful command that produces events (mandatory safety check)
 - ValidateFold ensures events can be replayed without errors before append
 - Events are persisted only after validation succeeds
 - The validated state from ValidateFold is used for the command result and optional snapshots
 - This ensures data safety: invalid events are rejected before they corrupt the stream
+- **Exception**: Stateless commands skip ValidateFold for performance - validation is deferred to subsequent stateful commands
 
 ### AggregateCommandExecutor<TState, TCommand>
 
@@ -84,12 +85,19 @@ public class AggregateCommandExecutor<TState, TCommand>
 ```
 
 **Workflow:**
-1. Load current state from repository (events + snapshots)
-2. Validate expected version (if required by command)
-3. Execute command via decider to produce events
-4. **Validate fold** (ensure events can be replayed without errors - returns new state)
-5. Persist events to event store (only after validation)
-6. Save snapshot if at interval (using the validated state from step 4)
+1. Check if command is stateless (via `[Command(Stateless = true)]`)
+2. **Stateful path (default)**:
+   - Load current state from repository (events + snapshots)
+   - Validate expected version (if required by command)
+   - Execute command via decider to produce events
+   - **Validate fold** (ensure events can be replayed without errors - returns new state)
+   - Persist events to event store (only after validation)
+   - Save snapshot if at interval (using the validated state)
+3. **Stateless path** (when `Stateless = true`):
+   - Get current stream version (efficient database query)
+   - Execute command via decider with initial state
+   - Persist events to event store (no fold validation)
+   - Snapshot updated if needed
 
 ### Base Classes (Recommended)
 
@@ -178,6 +186,7 @@ Properties:
 - `Name` (optional) - Human-readable command name
 - `Description` (optional) - What the command does
 - `ExpectedVersionKey` (optional) - Metadata key for expected stream version
+- `Stateless` (optional, default `false`) - Skip state loading and fold validation for performance
 
 ## Expected Stream Version Support
 
@@ -266,6 +275,142 @@ The expected version metadata value is automatically converted from:
 - `string` - parsed as long if valid
 
 **Important:** Version validation happens **before** the command decider runs. If the stream version doesn't match, the command is never executed because the user's decision was based on stale state.
+
+## Stateless Commands
+
+Commands can be marked as stateless when they don't require loading or validating the current aggregate state before execution. This optimization is useful for append-only operations, external integrations, or high-throughput scenarios.
+
+### When to Use Stateless Commands
+
+**Good candidates:**
+- Append-only operations that don't need to validate current state
+- External system integrations where events are sourced from outside systems
+- High-throughput logging or audit trails
+- Commands that produce events based solely on the command data
+
+**Not suitable for:**
+- Commands that need business rules validated against current state
+- Commands that check for duplicate operations
+- Commands that modify existing state based on current values
+
+### Defining Stateless Commands
+
+Set `Stateless = true` on the `[Command]` attribute:
+
+```csharp
+[Command("AuditLog", Stateless = true)]
+public sealed record RecordAuditEntry(string UserId, string Action, DateTime Timestamp);
+
+[Command("ExternalEvents", Stateless = true)]
+public sealed record ImportExternalEvent(string SourceSystem, string EventType, string Payload);
+```
+
+### Stateless Execution Behavior
+
+When `Stateless = true`:
+
+| Feature | Stateful (default) | Stateless |
+|---------|-------------------|-----------|
+| **State Loading** | ✅ Loads all events + snapshots | ❌ Skipped - uses initial state |
+| **Expected Version** | ✅ Validates if `ExpectedVersionKey` set | ✅ Validates if `ExpectedVersionKey` set |
+| **Fold Validation** | ✅ Validates events can be folded before append | ❌ Skipped - trusts decider output |
+| **Optimistic Concurrency** | ✅ Version checked on append | ✅ Version checked on append |
+| **Decider Receives** | Current aggregate state | Initial state |
+
+**Important Trade-offs:**
+
+1. **No Pre-Append Validation**: Events are appended without running `ValidateFold`. The decider must produce valid events because they won't be validated before persistence.
+
+2. **Deferred Validation**: Events are validated when they're loaded by subsequent stateful commands. Invalid events will cause those commands to fail during state loading.
+
+3. **State Parameter**: The command decider receives `InitialState()` instead of the current aggregate state. Design your decider to work with this.
+
+4. **Expected Version Still Enforced**: If you set `ExpectedVersionKey` on a stateless command, version checking still happens - only state loading and fold validation are skipped.
+
+5. **Concurrency Still Protected**: The event store still enforces optimistic concurrency on append - concurrent appends will conflict even for stateless commands.
+
+### Example: Stateless Audit Log
+
+```csharp
+// State doesn't matter for append-only audit logs
+[Aggregate("AuditLog")]
+public sealed record AuditLogState
+{
+    public int EntryCount { get; init; }
+}
+
+public sealed class AuditLogStateFolder : StateFolder<AuditLogState>
+{
+    public override AuditLogState InitialState() => new AuditLogState();
+
+    protected AuditLogState When(AuditEntryRecorded e, AuditLogState state) =>
+        state with { EntryCount = state.EntryCount + 1 };
+}
+
+// Stateless command - doesn't need to load state
+[Command("AuditLog", Stateless = true)]
+public sealed record RecordAuditEntry(string UserId, string Action, DateTime Timestamp);
+
+public sealed class AuditLogCommandDecider : CommandDecider<AuditLogState, AuditLogCommand>
+{
+    protected override IReadOnlyList<object> ExecuteCommand(AuditLogState state, AuditLogCommand command)
+    {
+        return command switch
+        {
+            RecordAuditEntry r => Event(new AuditEntryRecorded(r.UserId, r.Action, r.Timestamp)),
+            _ => throw new InvalidOperationException($"Unknown command: {command}")
+        };
+    }
+}
+
+// Execute without loading state
+var executor = scope.ServiceProvider.GetRequiredService<AggregateCommandExecutor<AuditLogState, AuditLogCommand>>();
+var streamId = new StreamIdentifier("AuditLog", "user-123");
+
+var (state, pointer, events) = await executor.ExecuteAsync(
+    streamId,
+    new RecordAuditEntry("user-123", "LoginAttempt", DateTime.UtcNow),
+    []);
+// State will be InitialState(), pointer will have correct version for optimistic concurrency
+```
+
+### Validation Architecture
+
+The stateless command model maintains data safety through **deferred validation**:
+
+```
+Stateless Command → Decider (receives initial state) → Events Appended (no ValidateFold)
+                                                              ↓
+                                                     Persisted to Event Store
+                                                              ↓
+Next Stateful Command → LoadStateAsync → Fold Events → ValidateFold (validates ALL events)
+                                                              ↓
+                                                  Invalid Event = Command Fails
+```
+
+**Key Insight**: You don't skip validation - you defer it to the next stateful operation. This is acceptable when:
+- The stateless command is trusted to produce valid events
+- Invalid events failing future commands is an acceptable trade-off
+- The performance gain from skipping state load justifies the risk
+
+### Performance Impact
+
+For streams with N events:
+
+**Stateful Command:**
+- Load N events from database
+- Deserialize N events  
+- Fold N events into state
+- Execute decider
+- Validate fold with new events
+- Append M new events
+
+**Stateless Command:**
+- Query current stream version (single DB query)
+- Execute decider with initial state
+- Append M new events (no fold validation)
+
+The performance difference scales with stream size - larger streams benefit more from stateless execution.
 
 ## Quick Start
 

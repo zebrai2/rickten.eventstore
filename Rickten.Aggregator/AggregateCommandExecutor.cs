@@ -34,24 +34,50 @@ public class AggregateCommandExecutor<TState, TCommand>
 
     /// <summary>
     /// Executes a command against an aggregate stream.
-    /// Workflow: load state, validate expected version (if required), execute command via decider, 
-    /// validate fold (pre-append safety check), append events, and optionally save snapshots.
     /// </summary>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
     /// <param name="metadata">Metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, stream pointer, and appended events.</returns>
+    /// <remarks>
+    /// <para><b>Standard workflow (stateful commands):</b></para>
+    /// <list type="number">
+    /// <item><description>Load current state from events and snapshots</description></item>
+    /// <item><description>Validate expected version if <see cref="CommandAttribute.ExpectedVersionKey"/> is configured</description></item>
+    /// <item><description>Execute command via decider with current state</description></item>
+    /// <item><description>Validate fold (pre-append safety check ensures events can be replayed)</description></item>
+    /// <item><description>Append events to event store</description></item>
+    /// <item><description>Save snapshot if at configured interval</description></item>
+    /// </list>
+    /// <para><b>Stateless workflow (<see cref="CommandAttribute.Stateless"/> = true):</b></para>
+    /// <list type="number">
+    /// <item><description>Get initial state (no event loading)</description></item>
+    /// <item><description>Validate expected version if <see cref="CommandAttribute.ExpectedVersionKey"/> is configured</description></item>
+    /// <item><description>Execute command via decider with initial state</description></item>
+    /// <item><description>Skip fold validation (trust decider output)</description></item>
+    /// <item><description>Append events to event store</description></item>
+    /// <item><description>Skip snapshot saving</description></item>
+    /// </list>
+    /// <para>
+    /// Stateless commands provide performance optimization for append-only scenarios where aggregate state
+    /// is not needed for the command decision. Expected version validation still runs when configured to
+    /// prevent stale-read conflicts.
+    /// </para>
+    /// </remarks>
     public async Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
         StreamIdentifier streamIdentifier,
         TCommand command,
         IReadOnlyList<AppendMetadata> metadata,
         CancellationToken cancellationToken = default)
     {
-        var (state, currentPointer) = await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
+        var isStateless = IsStatelessCommand(command);
+        var (state, currentPointer) = isStateless
+            ? (_repository.GetInitialState(), await _repository.GetCurrentPointerAsync(streamIdentifier, cancellationToken))
+            : await _repository.LoadStateAsync(streamIdentifier, cancellationToken);
 
         var (expectedVersion, expectedVersionKey) = GetExpectedVersionFromMetadata(command, metadata);
-        if (expectedVersion.HasValue && currentPointer != expectedVersion.Value)
+        if (expectedVersion.HasValue && currentPointer.Version != expectedVersion.Value)
         {
             var expectedPointer = streamIdentifier.At(expectedVersion.Value);
             throw new StreamVersionConflictException(
@@ -61,21 +87,44 @@ public class AggregateCommandExecutor<TState, TCommand>
                 $"The aggregate has changed since the decision was made.");
         }
 
-        var events              = _decider.Execute(state, command);
+        var events = _decider.Execute(state, command);
         if (events.Count == 0)
         {
             return (state, currentPointer, []);
         }
 
-        var newState            = _repository.ValidateFold(state, events);
-        var filteredMetadata    = metadata.Filter(expectedVersionKey);
-        var appendEvents        = events.ToAppendEvent(filteredMetadata);
+        var newState = isStateless 
+                ? state 
+                : _repository.ValidateFold(state, events);
 
-        var appendedEvents      = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
-        var finalPointer        = appendedEvents.LastVersion();
+        var filteredMetadata = metadata.Filter(expectedVersionKey);
+        var appendEvents = events.ToAppendEvent(filteredMetadata);
+        var appendedEvents = await _repository.AppendEventsAsync(currentPointer, appendEvents, cancellationToken);
+        var finalPointer = appendedEvents.LastVersion();
 
-        await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, cancellationToken);
+        if (!isStateless)
+        {
+            await _repository.SaveSnapshotIfNeededAsync(newState, currentPointer.Version, finalPointer, cancellationToken);
+        }
+
         return (newState, finalPointer, appendedEvents);
+    }
+
+    /// <summary>
+    /// Checks if a command is marked as stateless.
+    /// </summary>
+    private bool IsStatelessCommand(TCommand command)
+    {
+        var commandType = command?.GetType();
+        if (commandType == null)
+        {
+            return false;
+        }
+
+        var typeMetadata = _registry.GetMetadataByType(commandType);
+        var commandAttr = typeMetadata?.AttributeInstance as CommandAttribute;
+
+        return commandAttr?.Stateless ?? false;
     }
 
     /// <summary>
