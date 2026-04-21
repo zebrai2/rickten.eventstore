@@ -244,7 +244,7 @@ public class ReactionHostedServiceTests : IDisposable
 
         // Start and stop cleanly
         await host.StartAsync(cts.Token);
-        await Task.Delay(1); // Minimal scheduler delay
+        await Task.Delay(5); // Scheduler delay for CI reliability
         manualWaiter.AdvanceTime(); // Instant time advancement
         cts.Cancel();
         await host.StopAsync(CancellationToken.None);
@@ -341,14 +341,15 @@ public class ReactionHostedServiceTests : IDisposable
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            // Minimal delay for scheduler (NOT for time control - ManualWaiter handles that)
-            await Task.Delay(1);
+            // Small delay for scheduler (NOT for time control - ManualWaiter handles that)
+            // Using 5ms for CI reliability while still being 3x faster than original 15ms
+            await Task.Delay(5);
 
             // Instantly complete the polling wait
             manualWaiter.AdvanceTime();
 
-            // Another minimal delay for continuation execution
-            await Task.Delay(1);
+            // Another delay for continuation execution
+            await Task.Delay(5);
 
             // Check via a new scope to avoid DbContext concurrency
             using (var checkScope = provider.CreateScope())
@@ -458,10 +459,9 @@ public class ReactionHostedServiceTests : IDisposable
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            // Minimal delay for scheduler (NOT for time control - ManualWaiter handles that)
-            await Task.Delay(1);
+            await Task.Delay(5);
             manualWaiter.AdvanceTime();
-            await Task.Delay(1);
+            await Task.Delay(5);
 
             using (var checkScope = provider.CreateScope())
             {
@@ -560,10 +560,9 @@ public class ReactionHostedServiceTests : IDisposable
 
         while (!processedEventFound && attempts < maxAttempts)
         {
-            // Minimal delay for scheduler (NOT for time control - ManualWaiter handles that)
-            await Task.Delay(1);
+            await Task.Delay(5);
             manualWaiter.AdvanceTime();
-            await Task.Delay(1);
+            await Task.Delay(5);
 
             using (var checkScope = provider.CreateScope())
             {
