@@ -231,9 +231,8 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(100);
         });
 
-        // Use ManualWaiter for deterministic time control
-        var manualWaiter = new ManualWaiter();
-        services.AddSingleton<IWaiter>(manualWaiter);
+        // Use NoWaitWaiter - service runs at full speed
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
 
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
 
@@ -244,8 +243,7 @@ public class ReactionHostedServiceTests : IDisposable
 
         // Start and stop cleanly
         await host.StartAsync(cts.Token);
-        await Task.Delay(5); // Scheduler delay for CI reliability
-        manualWaiter.AdvanceTime(); // Instant time advancement
+        await Task.Yield(); // Let service start
         cts.Cancel();
         await host.StopAsync(CancellationToken.None);
 
@@ -304,9 +302,8 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
         });
 
-        // Use ManualWaiter for deterministic time control
-        var manualWaiter = new ManualWaiter();
-        services.AddSingleton<IWaiter>(manualWaiter);
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
 
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
 
@@ -330,62 +327,21 @@ public class ReactionHostedServiceTests : IDisposable
         var cts = new CancellationTokenSource();
         var host = provider.GetRequiredService<IHostedService>();
 
-        // Start the host
+        // Start the host - first iteration will process immediately
         await host.StartAsync(cts.Token);
 
-        // Poll for the processed event
-        // ManualWaiter controls WHEN waits complete, but scheduler needs time to execute continuations
-        var processedEventFound = false;
-        var attempts = 0;
-        var maxAttempts = 20;
-
-        while (!processedEventFound && attempts < maxAttempts)
-        {
-            // Small delay for scheduler (NOT for time control - ManualWaiter handles that)
-            // Using 5ms for CI reliability while still being 3x faster than original 15ms
-            await Task.Delay(5);
-
-            // Instantly complete the polling wait
-            manualWaiter.AdvanceTime();
-
-            // Another delay for continuation execution
-            await Task.Delay(5);
-
-            // Check via a new scope to avoid DbContext concurrency
-            using (var checkScope = provider.CreateScope())
-            {
-                var checkEventStore = checkScope.ServiceProvider.GetRequiredService<IEventStore>();
-                var events = new List<StreamEvent>();
-                await foreach (var evt in checkEventStore.LoadAsync(stream, CancellationToken.None))
-                {
-                    events.Add(evt);
-                }
-
-                processedEventFound = events.Any(e => e.Event is TestProcessedEvent);
-            }
-
-            attempts++;
-        }
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
 
         // Stop the host
         cts.Cancel();
-        manualWaiter.AdvanceTime(); // Complete any pending waits
         await host.StopAsync(CancellationToken.None);
 
-        // Assert - The reaction must have executed the command
-        Assert.True(processedEventFound, 
-            $"Reaction did not execute command within {maxAttempts} attempts. " +
-            "The hosted service should have called ReactionRunner.CatchUpAsync and produced a TestProcessedEvent.");
+        // The first iteration should have processed the reaction and executed the command
+        var events = await eventStore.LoadAsync(stream, CancellationToken.None).ToListAsync();
 
-        // Verify the full event sequence
-        var finalEvents = new List<StreamEvent>();
-        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
-        {
-            finalEvents.Add(evt);
-        }
-
-        Assert.Contains(finalEvents, e => e.Event is TestTriggeredEvent);
-        Assert.Contains(finalEvents, e => e.Event is TestProcessedEvent);
+        Assert.Contains(events, e => e.Event is TestTriggeredEvent);
+        Assert.Contains(events, e => e.Event is TestProcessedEvent);
     }
 
     [Fact]
@@ -437,8 +393,8 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
         });
 
-        var manualWaiter = new ManualWaiter();
-        services.AddSingleton<IWaiter>(manualWaiter);
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
 
         // DefaultIntervalReaction has NO PollingIntervalMilliseconds in attribute
         // Should use the default from RicktenRuntimeOptions (50ms)
@@ -449,44 +405,24 @@ public class ReactionHostedServiceTests : IDisposable
         var cts = new CancellationTokenSource();
         var host = provider.GetRequiredService<IHostedService>();
 
-        // Start the host
+        // Start the host - first iteration will process immediately
         await host.StartAsync(cts.Token);
 
-        // Poll for the processed event
-        var processedEventFound = false;
-        var attempts = 0;
-        var maxAttempts = 20;
-
-        while (!processedEventFound && attempts < maxAttempts)
-        {
-            await Task.Delay(5);
-            manualWaiter.AdvanceTime();
-            await Task.Delay(5);
-
-            using (var checkScope = provider.CreateScope())
-            {
-                var checkEventStore = checkScope.ServiceProvider.GetRequiredService<IEventStore>();
-                var events = new List<StreamEvent>();
-                await foreach (var evt in checkEventStore.LoadAsync(stream, CancellationToken.None))
-                {
-                    events.Add(evt);
-                }
-
-                processedEventFound = events.Any(e => e.Event is TestProcessedEvent);
-            }
-
-            attempts++;
-        }
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
 
         // Stop the host
         cts.Cancel();
-        manualWaiter.AdvanceTime();
         await host.StopAsync(CancellationToken.None);
 
-        // Assert - The reaction must have executed
-        Assert.True(processedEventFound, 
-            $"DefaultIntervalReaction did not execute within {maxAttempts} attempts. " +
-            "Should have used the default polling interval from RicktenRuntimeOptions.");
+        // The first iteration should have processed the reaction
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "DefaultReacted");
     }
 
     [Fact]
@@ -537,8 +473,8 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
         });
 
-        var manualWaiter = new ManualWaiter();
-        services.AddSingleton<IWaiter>(manualWaiter);
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
 
         // TestReaction has PollingIntervalMilliseconds = 100 in attribute
         // But we override with parameter (50ms) - parameter should win
@@ -550,44 +486,24 @@ public class ReactionHostedServiceTests : IDisposable
         var cts = new CancellationTokenSource();
         var host = provider.GetRequiredService<IHostedService>();
 
-        // Start the host
+        // Start the host - launches ExecuteAsync on background thread
         await host.StartAsync(cts.Token);
 
-        // Poll for the processed event
-        var processedEventFound = false;
-        var attempts = 0;
-        var maxAttempts = 20;
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
 
-        while (!processedEventFound && attempts < maxAttempts)
-        {
-            await Task.Delay(5);
-            manualWaiter.AdvanceTime();
-            await Task.Delay(5);
-
-            using (var checkScope = provider.CreateScope())
-            {
-                var checkEventStore = checkScope.ServiceProvider.GetRequiredService<IEventStore>();
-                var events = new List<StreamEvent>();
-                await foreach (var evt in checkEventStore.LoadAsync(stream, CancellationToken.None))
-                {
-                    events.Add(evt);
-                }
-
-                processedEventFound = events.Any(e => e.Event is TestProcessedEvent);
-            }
-
-            attempts++;
-        }
-
-        // Stop the host
+        // Stop the host - StopAsync waits for ExecuteAsync to complete
         cts.Cancel();
-        manualWaiter.AdvanceTime();
         await host.StopAsync(CancellationToken.None);
 
-        // Assert - The reaction must have executed
-        Assert.True(processedEventFound, 
-            $"TestReaction did not execute within {maxAttempts} attempts. " +
-            "Should have used the parameter override polling interval.");
+        // The first iteration should have processed the reaction
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "Reacted");
     }
 
     [Fact]
@@ -623,9 +539,7 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(100);
         });
 
-        // Use ManualWaiter for deterministic time control
-        var manualWaiter = new ManualWaiter();
-        services.AddSingleton<IWaiter>(manualWaiter);
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
 
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
 
@@ -637,7 +551,6 @@ public class ReactionHostedServiceTests : IDisposable
         // Act - Start and immediately stop
         await host.StartAsync(cts.Token);
         cts.Cancel();
-        manualWaiter.AdvanceTime(); // Complete any pending waits
 
         // Should complete without hanging or throwing
         await host.StopAsync(CancellationToken.None);
@@ -675,8 +588,7 @@ public class ReactionHostedServiceTests : IDisposable
 
         services.AddRicktenRuntime();
 
-        // Use ManualWaiter for deterministic time control
-        services.AddSingleton<IWaiter>(new ManualWaiter());
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
 
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>(
             pollingInterval: TimeSpan.FromSeconds(1));
