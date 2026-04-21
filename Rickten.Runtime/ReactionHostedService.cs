@@ -3,7 +3,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rickten.Aggregator;
-using Rickten.EventStore;
 using Rickten.Reactor;
 
 namespace Rickten.Runtime;
@@ -20,11 +19,13 @@ internal class ReactionHostedService<TReaction, TState, TView, TCommand>(
     IServiceScopeFactory scopeFactory,
     IOptions<RicktenRuntimeOptions> options,
     ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> logger,
+    IWaiter waiter,
     TimeSpan? pollingInterval = null) : BackgroundService
     where TReaction : Reaction<TView, TCommand>
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
     private readonly ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IWaiter _waiter = waiter ?? throw new ArgumentNullException(nameof(waiter));
     private readonly TimeSpan _pollingInterval = pollingInterval ?? options.Value.DefaultPollingInterval;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

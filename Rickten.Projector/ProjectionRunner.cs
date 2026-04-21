@@ -185,7 +185,6 @@ public sealed class ProjectionRunner(IEventStore eventStore,
     /// <param name="currentView">The current projection view state.</param>
     /// <param name="currentPosition">The current projection position.</param>
     /// <param name="targetPosition">The target position to synchronize to.</param>
-    /// <param name="namespace">The namespace for the projection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The synchronized view and position.</returns>
     public async Task<(TView View, long Position)> SyncToPositionAsync<TView>(
@@ -193,7 +192,6 @@ public sealed class ProjectionRunner(IEventStore eventStore,
         TView currentView,
         long currentPosition,
         long targetPosition,
-        string @namespace = "system",
         CancellationToken cancellationToken = default)
     {
         if (currentPosition > targetPosition)

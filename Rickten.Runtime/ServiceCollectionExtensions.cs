@@ -109,11 +109,13 @@ public static class ServiceCollectionExtensions
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
             var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<RicktenRuntimeOptions>>();
             var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ReactionHostedService<TReaction, TState, TView, TCommand>>>();
+            var waiter = provider.GetRequiredService<IWaiter>();
 
             return new ReactionHostedService<TReaction, TState, TView, TCommand>(
                 scopeFactory,
                 options,
                 logger,
+                waiter,
                 effectiveInterval);
         });
 
