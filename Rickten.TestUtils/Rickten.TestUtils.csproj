@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Rickten.EventStore\Rickten.EventStore.csproj" />
+    <ProjectReference Include="..\Rickten.Runtime\Rickten.Runtime.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -166,7 +166,6 @@ public class ProjectionRunnerTests : IDisposable
         // the checkpoint is not updated (saves unnecessary writes).
 
         var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
-        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
         var runner = _serviceProvider.GetRequiredService<ProjectionRunner>();
         var projection = new OrderCounterProjection();
 
@@ -284,7 +283,6 @@ public class ProjectionRunnerTests : IDisposable
     public async Task CatchUpAsync_WithEventTypeFilter_ProcessesOnlyMatchingEvents()
     {
         var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
-        var projectionStore = _serviceProvider.GetRequiredService<IProjectionStore>();
         var runner = _serviceProvider.GetRequiredService<ProjectionRunner>();
         var projection = new EventTypeFilteredProjection();
 

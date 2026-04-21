@@ -27,19 +27,16 @@ public record ProcessTestCommand(string Id, string Reason);
 public record TestAggregateState(string Id, int ProcessCount);
 
 // Test state folder
-public class TestAggregateStateFolder : StateFolder<TestAggregateState>
+public class TestAggregateStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+    : StateFolder<TestAggregateState>(registry)
 {
-    public TestAggregateStateFolder(EventStore.TypeMetadata.ITypeMetadataRegistry registry) : base(registry) { }
-
-    public override TestAggregateState InitialState() => new TestAggregateState("", 0);
+    public override TestAggregateState InitialState() => new("", 0);
 
     // TestTriggeredEvent is a trigger from outside this aggregate - it doesn't modify this aggregate's state
     protected override ISet<Type> IgnoredEvents => new HashSet<Type> { typeof(TestTriggeredEvent) };
 
-    protected TestAggregateState When(TestProcessedEvent e, TestAggregateState state)
-    {
-        return state with { Id = e.Id, ProcessCount = state.ProcessCount + 1 };
-    }
+    protected static TestAggregateState When(TestProcessedEvent e, TestAggregateState state) 
+        => state with { Id = e.Id, ProcessCount = state.ProcessCount + 1 };
 }
 
 // Test command decider
@@ -58,7 +55,7 @@ public record TestProjectionView(Dictionary<string, int> Values);
 [Rickten.Projector.Projection("TestProjection")]
 public class TestProjection : Rickten.Projector.Projection<TestProjectionView>
 {
-    public override TestProjectionView InitialView() => new TestProjectionView(new Dictionary<string, int>());
+    public override TestProjectionView InitialView() => new([]);
 
     protected override TestProjectionView ApplyEvent(TestProjectionView view, StreamEvent streamEvent)
     {
@@ -76,15 +73,10 @@ public class TestProjection : Rickten.Projector.Projection<TestProjectionView>
 
 // Test reaction with polling interval in attribute
 [Reaction("TestReaction", ["TestAggregate.Triggered.v1"], PollingIntervalMilliseconds = 100)]
-public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
+public class TestReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry)
+    : Reaction<TestProjectionView, ProcessTestCommand>(registry)
 {
-    private readonly TestProjection _projection;
-
-    public TestReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry)
-        : base(registry)
-    {
-        _projection = new TestProjection();
-    }
+    private readonly TestProjection _projection = new();
 
     public override IProjection<TestProjectionView> Projection => _projection;
 
@@ -104,15 +96,10 @@ public class TestReaction : Reaction<TestProjectionView, ProcessTestCommand>
 
 // Test reaction without polling interval (uses default)
 [Reaction("DefaultIntervalReaction", ["TestAggregate.Triggered.v1"])]
-public class DefaultIntervalReaction : Reaction<TestProjectionView, ProcessTestCommand>
+public class DefaultIntervalReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry) 
+    : Reaction<TestProjectionView, ProcessTestCommand>(registry)
 {
-    private readonly TestProjection _projection;
-
-    public DefaultIntervalReaction(EventStore.TypeMetadata.ITypeMetadataRegistry registry)
-        : base(registry)
-    {
-        _projection = new TestProjection();
-    }
+    private readonly TestProjection _projection = new();
 
     public override IProjection<TestProjectionView> Projection => _projection;
 
@@ -133,7 +120,7 @@ public class DefaultIntervalReaction : Reaction<TestProjectionView, ProcessTestC
 // In-memory projection store for testing
 public class InMemoryProjectionStore : IProjectionStore
 {
-    private readonly Dictionary<(string Namespace, string Key), object> _projections = new();
+    private readonly Dictionary<(string Namespace, string Key), object> _projections = [];
 
     public Task<Rickten.EventStore.Projection<TState>?> LoadProjectionAsync<TState>(
         string projectionKey,
@@ -244,6 +231,9 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(100);
         });
 
+        // Use NoWaitWaiter - service runs at full speed
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
+
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
 
         var provider = services.BuildServiceProvider();
@@ -253,7 +243,7 @@ public class ReactionHostedServiceTests : IDisposable
 
         // Start and stop cleanly
         await host.StartAsync(cts.Token);
-        await Task.Delay(200);
+        await Task.Yield(); // Let service start
         cts.Cancel();
         await host.StopAsync(CancellationToken.None);
 
@@ -271,10 +261,10 @@ public class ReactionHostedServiceTests : IDisposable
 
         // Append trigger event
         var stream = new StreamIdentifier("TestAggregate", "test-1");
-        await eventStore.AppendAsync(new StreamPointer(stream, 0), new List<AppendEvent>
-        {
-            new AppendEvent(new TestTriggeredEvent("test-1", 42), null)
-        });
+        await eventStore.AppendAsync(new StreamPointer(stream, 0),
+        [
+            new(new TestTriggeredEvent("test-1", 42), null)
+        ]);
 
         var services = new ServiceCollection();
 
@@ -312,7 +302,11 @@ public class ReactionHostedServiceTests : IDisposable
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
         });
 
-        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
+
+        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>(
+            pollingInterval: TimeSpan.FromMilliseconds(50));
 
         var provider = services.BuildServiceProvider();
 
@@ -334,67 +328,195 @@ public class ReactionHostedServiceTests : IDisposable
         var cts = new CancellationTokenSource();
         var host = provider.GetRequiredService<IHostedService>();
 
-        // Start the host and give it a moment to begin execution
+        // Start the host - first iteration will process immediately
         await host.StartAsync(cts.Token);
-        await Task.Delay(200); // Give the background service time to start
 
-        // Poll for the processed event with timeout
-        var processedEventFound = false;
-        var timeout = TimeSpan.FromSeconds(10);
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        while (!processedEventFound && stopwatch.Elapsed < timeout)
-        {
-            var events = new List<StreamEvent>();
-            await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
-            {
-                events.Add(evt);
-            }
-
-            processedEventFound = events.Any(e => e.Event is TestProcessedEvent);
-
-            if (!processedEventFound)
-            {
-                await Task.Delay(100);
-            }
-        }
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
 
         // Stop the host
         cts.Cancel();
         await host.StopAsync(CancellationToken.None);
 
-        // Assert - The reaction must have executed the command
-        Assert.True(processedEventFound, 
-            $"Reaction did not execute command within {timeout.TotalSeconds} seconds. " +
-            "The hosted service should have called ReactionRunner.CatchUpAsync and produced a TestProcessedEvent.");
+        // The first iteration should have processed the reaction and executed the command
+        var events = await eventStore.LoadAsync(stream, CancellationToken.None).ToListAsync();
 
-        // Verify the full event sequence
-        var finalEvents = new List<StreamEvent>();
-        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
-        {
-            finalEvents.Add(evt);
-        }
+        Assert.Contains(events, e => e.Event is TestTriggeredEvent);
+        Assert.Contains(events, e => e.Event is TestProcessedEvent);
 
-        Assert.Contains(finalEvents, e => e.Event is TestTriggeredEvent);
-        Assert.Contains(finalEvents, e => e.Event is TestProcessedEvent);
+        // Verify the polling interval was used
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
-    [Fact(Skip = "End-to-end integration test - requires real infrastructure for reliable timing")]
+    [Fact]
     public async Task HostedService_Uses_Default_Interval_When_Attribute_Not_Set()
     {
-        // This test would verify default interval usage
-        // Skipped: Complex timing dependencies with in-memory database
-        // Better suited for integration test suite with real infrastructure  
-        await Task.CompletedTask;
+        // Verifies that a reaction without PollingIntervalMilliseconds attribute uses the default interval
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+
+        // Append trigger event
+        var stream = new StreamIdentifier("TestAggregate", "default-test");
+        await eventStore.AppendAsync(new StreamPointer(stream, 0),
+        [
+            new(new TestTriggeredEvent("default-test", 999), null)
+        ]);
+
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+
+        // Register EventStore infrastructure
+        services.AddEventStore(options =>
+        {
+            options.UseSqlite(_connection);
+        }, typeof(TestReaction).Assembly);
+
+        // Override with shared instances
+        services.AddSingleton<IEventStore>(eventStore);
+        services.AddSingleton<IProjectionStore>(_projectionStore);
+
+        services.AddReactions(typeof(TestReaction).Assembly);
+
+        services.AddTransient<TestAggregateStateFolder>();
+        services.AddTransient<TestCommandDecider>();
+        services.AddTransient<AggregateRepository<TestAggregateState>>(sp =>
+            new AggregateRepository<TestAggregateState>(
+                sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<TestAggregateStateFolder>(),
+                NoOpSnapshotStore.Instance));
+
+        services.AddTransient<AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>>(sp =>
+            new AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>(
+                sp.GetRequiredService<AggregateRepository<TestAggregateState>>(),
+                sp.GetRequiredService<TestCommandDecider>(),
+                sp.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>()));
+
+        // Set a custom default interval
+        services.AddRicktenRuntime(options =>
+        {
+            options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
+        });
+
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
+
+        // DefaultIntervalReaction has NO PollingIntervalMilliseconds in attribute
+        // Should use the default from RicktenRuntimeOptions (50ms)
+        services.AddHostedReaction<DefaultIntervalReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
+
+        var provider = services.BuildServiceProvider();
+
+        var cts = new CancellationTokenSource();
+        var host = provider.GetRequiredService<IHostedService>();
+
+        // Start the host - first iteration will process immediately
+        await host.StartAsync(cts.Token);
+
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
+
+        // Stop the host
+        cts.Cancel();
+        await host.StopAsync(CancellationToken.None);
+
+        // The first iteration should have processed the reaction
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "DefaultReacted");
+
+        // Verify the default interval (50ms) was used, not the attribute value
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
-    [Fact(Skip = "End-to-end integration test - requires real infrastructure for reliable timing")]
+    [Fact]
     public async Task HostedService_Parameter_Override_Takes_Precedence()
     {
-        // This test would verify parameter override behavior
-        // Skipped: Complex timing dependencies with in-memory database
-        // Better suited for integration test suite with real infrastructure
-        await Task.CompletedTask;
+        // Verifies that pollingInterval parameter override takes precedence over attribute value
+        var eventStore = _serviceProvider.GetRequiredService<IEventStore>();
+
+        // Append trigger event
+        var stream = new StreamIdentifier("TestAggregate", "override-test");
+        await eventStore.AppendAsync(new StreamPointer(stream, 0),
+        [
+            new(new TestTriggeredEvent("override-test", 777), null)
+        ]);
+
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+
+        // Register EventStore infrastructure
+        services.AddEventStore(options =>
+        {
+            options.UseSqlite(_connection);
+        }, typeof(TestReaction).Assembly);
+
+        // Override with shared instances
+        services.AddSingleton<IEventStore>(eventStore);
+        services.AddSingleton<IProjectionStore>(_projectionStore);
+
+        services.AddReactions(typeof(TestReaction).Assembly);
+
+        services.AddTransient<TestAggregateStateFolder>();
+        services.AddTransient<TestCommandDecider>();
+        services.AddTransient<AggregateRepository<TestAggregateState>>(sp =>
+            new AggregateRepository<TestAggregateState>(
+                sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<TestAggregateStateFolder>(),
+                NoOpSnapshotStore.Instance));
+
+        services.AddTransient<AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>>(sp =>
+            new AggregateCommandExecutor<TestAggregateState, ProcessTestCommand>(
+                sp.GetRequiredService<AggregateRepository<TestAggregateState>>(),
+                sp.GetRequiredService<TestCommandDecider>(),
+                sp.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>()));
+
+        services.AddRicktenRuntime(options =>
+        {
+            options.DefaultPollingInterval = TimeSpan.FromMilliseconds(50);
+        });
+
+        var signalingWaiter = new TestUtils.SignalingWaiter();
+        services.AddSingleton<IWaiter>(signalingWaiter);
+
+        // TestReaction has PollingIntervalMilliseconds = 100 in attribute
+        // But we override with parameter (50ms) - parameter should win
+        services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>(
+            pollingInterval: TimeSpan.FromMilliseconds(50));
+
+        var provider = services.BuildServiceProvider();
+
+        var cts = new CancellationTokenSource();
+        var host = provider.GetRequiredService<IHostedService>();
+
+        // Start the host - launches ExecuteAsync on background thread
+        await host.StartAsync(cts.Token);
+
+        // Wait for the first iteration to complete
+        await signalingWaiter.WaitForIterationAsync(CancellationToken.None);
+
+        // Stop the host - StopAsync waits for ExecuteAsync to complete
+        cts.Cancel();
+        await host.StopAsync(CancellationToken.None);
+
+        // The first iteration should have processed the reaction
+        var events = new List<StreamEvent>();
+        await foreach (var evt in eventStore.LoadAsync(stream, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Contains(events, e => e.Event is TestProcessedEvent evt && evt.Reason == "Reacted");
+
+        // Verify the parameter override (50ms) was used, not the attribute value (100ms)
+        Assert.NotNull(signalingWaiter.CapturedDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(50), signalingWaiter.CapturedDuration.Value);
     }
 
     [Fact]
@@ -429,6 +551,8 @@ public class ReactionHostedServiceTests : IDisposable
         {
             options.DefaultPollingInterval = TimeSpan.FromMilliseconds(100);
         });
+
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
 
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>();
 
@@ -476,6 +600,9 @@ public class ReactionHostedServiceTests : IDisposable
                 sp.GetRequiredService<EventStore.TypeMetadata.ITypeMetadataRegistry>()));
 
         services.AddRicktenRuntime();
+
+        services.AddSingleton<IWaiter>(new NoWaitWaiter());
+
         services.AddHostedReaction<TestReaction, TestAggregateState, TestProjectionView, ProcessTestCommand>(
             pollingInterval: TimeSpan.FromSeconds(1));
 
@@ -491,5 +618,6 @@ public class ReactionHostedServiceTests : IDisposable
     {
         _connection?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

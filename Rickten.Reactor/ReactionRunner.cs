@@ -112,7 +112,6 @@ public sealed class ReactionRunner(IEventStore eventStore,
             projectionView,
             projectionPosition,
             reactionPosition,
-            "reaction",
             cancellationToken);
 
 
