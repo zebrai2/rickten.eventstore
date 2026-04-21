@@ -34,15 +34,37 @@ public class AggregateCommandExecutor<TState, TCommand>
 
     /// <summary>
     /// Executes a command against an aggregate stream.
-    /// Workflow: load state, validate expected version (if required), execute command via decider, 
-    /// validate fold (pre-append safety check), append events, and optionally save snapshots.
-    /// For stateless commands: skip state loading and fold validation, but still enforce expected version if configured.
     /// </summary>
     /// <param name="streamIdentifier">The stream identifier.</param>
     /// <param name="command">The command to execute.</param>
     /// <param name="metadata">Metadata to attach to events.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new state, stream pointer, and appended events.</returns>
+    /// <remarks>
+    /// <para><b>Standard workflow (stateful commands):</b></para>
+    /// <list type="number">
+    /// <item><description>Load current state from events and snapshots</description></item>
+    /// <item><description>Validate expected version if <see cref="CommandAttribute.ExpectedVersionKey"/> is configured</description></item>
+    /// <item><description>Execute command via decider with current state</description></item>
+    /// <item><description>Validate fold (pre-append safety check ensures events can be replayed)</description></item>
+    /// <item><description>Append events to event store</description></item>
+    /// <item><description>Save snapshot if at configured interval</description></item>
+    /// </list>
+    /// <para><b>Stateless workflow (<see cref="CommandAttribute.Stateless"/> = true):</b></para>
+    /// <list type="number">
+    /// <item><description>Get initial state (no event loading)</description></item>
+    /// <item><description>Validate expected version if <see cref="CommandAttribute.ExpectedVersionKey"/> is configured</description></item>
+    /// <item><description>Execute command via decider with initial state</description></item>
+    /// <item><description>Skip fold validation (trust decider output)</description></item>
+    /// <item><description>Append events to event store</description></item>
+    /// <item><description>Skip snapshot saving</description></item>
+    /// </list>
+    /// <para>
+    /// Stateless commands provide performance optimization for append-only scenarios where aggregate state
+    /// is not needed for the command decision. Expected version validation still runs when configured to
+    /// prevent stale-read conflicts.
+    /// </para>
+    /// </remarks>
     public async Task<(TState State, StreamPointer Pointer, IReadOnlyList<StreamEvent> Events)> ExecuteAsync(
         StreamIdentifier streamIdentifier,
         TCommand command,
