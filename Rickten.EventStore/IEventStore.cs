@@ -49,6 +49,17 @@ public interface IEventStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the current version of a stream without loading all events.
+    /// Returns a StreamPointer with version 0 if the stream does not exist.
+    /// </summary>
+    /// <param name="streamIdentifier">The stream identifier to get the current version for.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>The current stream pointer (stream identifier + version).</returns>
+    Task<StreamPointer> GetCurrentVersionAsync(
+        StreamIdentifier streamIdentifier,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Appends events to a stream with optimistic concurrency control.
     /// </summary>
     /// <param name="expectedVersion">

@@ -34,6 +34,14 @@ public sealed class CommandAttribute(string aggregate) : Attribute, ITypeMetadat
     /// </summary>
     public string? ExpectedVersionKey { get; init; }
 
+    /// <summary>
+    /// Gets or sets whether this command is stateless.
+    /// When true, the command execution does not depend on loaded aggregate state.
+    /// Stateless commands skip state loading, expected version validation, and fold validation.
+    /// Default is false (stateful command behavior).
+    /// </summary>
+    public bool Stateless { get; init; }
+
     /// <inheritdoc />
     string? ITypeMetadata.GetWireName(Type decoratedType)
     {

@@ -59,4 +59,22 @@ public interface IAggregateRepository<TState>
         long previousVersion,
         StreamPointer finalVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the initial aggregate state before any events are applied.
+    /// Used for stateless command execution.
+    /// </summary>
+    /// <returns>The initial state.</returns>
+    TState GetInitialState();
+
+    /// <summary>
+    /// Gets the current stream pointer without loading or folding events.
+    /// Used for stateless command execution to determine the append version.
+    /// </summary>
+    /// <param name="streamIdentifier">The stream identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The current stream pointer.</returns>
+    Task<StreamPointer> GetCurrentPointerAsync(
+        StreamIdentifier streamIdentifier,
+        CancellationToken cancellationToken = default);
 }

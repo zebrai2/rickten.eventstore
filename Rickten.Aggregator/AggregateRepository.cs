@@ -172,4 +172,28 @@ public class AggregateRepository<TState>(
             await _snapshotStore.SaveSnapshotAsync(finalVersion, newState!, cancellationToken);
         }
     }
+
+    /// <summary>
+    /// Gets the initial aggregate state before any events are applied.
+    /// Used for stateless command execution.
+    /// </summary>
+    /// <returns>The initial state.</returns>
+    public TState GetInitialState()
+    {
+        return _folder.InitialState();
+    }
+
+    /// <summary>
+    /// Gets the current stream pointer without loading or folding events.
+    /// Used for stateless command execution to determine the append version.
+    /// </summary>
+    /// <param name="streamIdentifier">The stream identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The current stream pointer.</returns>
+    public async Task<StreamPointer> GetCurrentPointerAsync(
+        StreamIdentifier streamIdentifier,
+        CancellationToken cancellationToken = default)
+    {
+        return await _eventStore.GetCurrentVersionAsync(streamIdentifier, cancellationToken);
+    }
 }

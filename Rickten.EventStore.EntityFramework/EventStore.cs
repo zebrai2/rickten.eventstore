@@ -267,6 +267,18 @@ public sealed class EventStore(
         return [.. loadedEvents.Select(MapToStreamEvent)];
     }
 
+    /// <inheritdoc />
+    public async Task<StreamPointer> GetCurrentVersionAsync(
+        StreamIdentifier streamIdentifier,
+        CancellationToken cancellationToken = default)
+    {
+        var currentVersion = await _context.Events.GetCurrentVersionAsync(
+            streamIdentifier,
+            cancellationToken);
+
+        return streamIdentifier.At(currentVersion);
+    }
+
     private StreamEvent MapToStreamEvent(EventEntity entity)
     {
         var streamPointer = new StreamPointer(
