@@ -13,7 +13,6 @@ A trigger type is the **mechanism** - it knows how to create and run trigger ins
 - Recurring - React on a schedule (cron, interval)
 - Delayed - React after a delay
 - Endpoint - React to HTTP/gRPC calls
-- Manual - React to programmatic triggers
 
 ### TriggerInstance
 
