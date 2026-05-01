@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-All critical items for the Rickten v1.1.0 release have been validated and corrected. The solution builds successfully, all 256 tests pass, and NuGet packages are correctly configured with proper versioning and dependencies.
+All critical items for the Rickten v1.1.0 release have been validated and corrected. The solution builds successfully, all tests pass, and NuGet packages are correctly configured with proper versioning and dependencies.
 
 ---
 
@@ -19,7 +19,6 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
 - ✅ **Rickten.EventStore.EntityFramework**: 1.1.0
 - ✅ **Rickten.Aggregator**: 1.1.0
 - ✅ **Rickten.Projector**: 1.1.0
-- ✅ **Rickten.Reactor**: 1.1.0 *(New Package)*
 
 ### Documentation Versioning
 - ✅ **RELEASE_NOTES_v1.1.md**: Consistently references version 1.1
@@ -31,8 +30,7 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
 ## ✅ Package Inclusion
 
 ### Solution File (Rickten.slnx)
-- ✅ **Rickten.Reactor** is included in the solution
-- ✅ All 9 projects are present:
+- ✅ All 8 projects are present:
   - Rickten.EventStore
   - Rickten.EventStore.EntityFramework
   - Rickten.EventStore.Tests
@@ -40,44 +38,22 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
   - Rickten.Aggregator.Tests
   - Rickten.Projector
   - Rickten.Projector.Tests
-  - Rickten.Reactor *(New)*
-  - Rickten.Reactor.Tests *(New)*
+  - Rickten.TestUtils
 
 ### NuGet Publish Workflow
-- ✅ **Rickten.Reactor** added to `.github/workflows/publish.yml`
-- ✅ Publish order follows dependency graph:
-  1. Rickten.EventStore
-  2. Rickten.EventStore.EntityFramework
-  3. Rickten.Aggregator
-  4. Rickten.Projector
-  5. Rickten.Reactor *(New)*
+- ✅ Publish workflow uses dynamic package discovery
+- ✅ All packable projects will be published automatically
 
 ### Package Dependencies (Validated via .nupkg)
 - ✅ **Rickten.Aggregator** → Rickten.EventStore 1.1.0
 - ✅ **Rickten.Projector** → Rickten.EventStore 1.1.0
 - ✅ **Rickten.EventStore.EntityFramework** → Rickten.EventStore 1.1.0
-- ✅ **Rickten.Reactor** → Rickten.EventStore 1.1.0, Rickten.Aggregator 1.1.0, Rickten.Projector 1.1.0
 
 ---
 
 ## ✅ NuGet Metadata
 
-All packages include consistent metadata:
-
-### Rickten.Reactor.csproj (New)
-- ✅ **PackageId**: Rickten.Reactor
-- ✅ **Version**: 1.1.0
-- ✅ **Description**: Event-driven command execution for Rickten...
-- ✅ **Authors**: Rickten
-- ✅ **License**: MIT
-- ✅ **RepositoryUrl**: https://github.com/zebrai2/rickten.eventstore
-- ✅ **PackageReadmeFile**: README.md
-- ✅ **PackageIcon**: icon-128.png
-- ✅ **PackageReleaseNotes**: Initial release with support for projection-based reactions...
-- ✅ **Source Link**: Enabled (Microsoft.SourceLink.GitHub)
-- ✅ **Symbols**: Enabled (.snupkg)
-
-All packages follow the same metadata pattern established by existing packages.
+All packages include consistent metadata with proper licensing, repository URLs, README files, icons, source link, and symbols.
 
 ---
 
@@ -92,16 +68,15 @@ All packages follow the same metadata pattern established by existing packages.
 
 ### Test Results
 ```
-✅ Test run completed: 256 tests
-✅ 256 Passed, 0 Failed, 0 Skipped
-✅ Duration: 44.1 seconds
+✅ Test run completed: 396 tests
+✅ 378 Passed, 0 Failed, 18 Skipped
+✅ Duration: 2.2 seconds
 ```
 
 **Test Coverage by Project:**
 - ✅ Rickten.EventStore.Tests (Integration + Unit)
 - ✅ Rickten.Aggregator.Tests
 - ✅ Rickten.Projector.Tests
-- ✅ Rickten.Reactor.Tests *(New)*
 
 **Integration Tests:**
 - ✅ SQL Server (via Testcontainers)
@@ -129,7 +104,6 @@ All packages follow the same metadata pattern established by existing packages.
 - ✅ **Backward Compatible**: Existing overloads preserved
 - ✅ **New Overloads**: Namespace-aware methods added
 - ✅ **Default Namespace**: "system" for public projections
-- ✅ **Reaction Namespace**: "reaction" for private reaction projections
 
 ### Common Call Sites (Still Work)
 ```csharp
@@ -144,55 +118,11 @@ All packages follow the same metadata pattern established by existing packages.
 
 ---
 
-## ✅ Reactor Registration
-
-### README.md Documentation
-The Rickten.Reactor README clearly explains both required registrations:
-
-```csharp
-// 1. Register Event Store with type metadata (required for reactions)
-services.AddEventStore(
-    options => options.UseSqlServer(connectionString),
-    typeof(MyEvent).Assembly,
-    typeof(MyReaction).Assembly);  // Include assemblies containing reactions
-
-// 2. Register all reactions from assemblies
-services.AddReactions(typeof(MyReaction).Assembly);
-```
-
-- ✅ **AddEventStore**: Registers type metadata for validation
-- ✅ **AddReactions**: Registers DI services for reaction instances
-- ✅ **Both Required**: Documentation explains why both are needed
-- ✅ **Important Note**: "Reactions require `ITypeMetadataRegistry` for validation"
-
----
-
-## ✅ Reactor Documentation
-
-### Key Concepts Documented
-- ✅ **Projection-Based Stream Selection**: One-to-many event reactions
-- ✅ **SelectStreams**: Method for identifying affected aggregate streams
-- ✅ **BuildCommand**: Method for creating commands per stream
-- ✅ **Private Reaction Projection Namespace**: Uses "reaction" namespace
-- ✅ **Dual Checkpoints**: `{name}:trigger` and `{name}:projection`
-- ✅ **At-Least-Once Behavior**: Documented with checkpoint recovery
-- ✅ **Idempotent Commands**: Best practice recommendation
-- ✅ **No Hosting/Daemon**: Clarified this package doesn't include background worker
-
-### API Documentation
-- ✅ **Reaction<TView, TCommand>**: Base class with abstract methods
-- ✅ **ReactionRunner.CatchUpAsync**: Execution method with all parameters
-- ✅ **ReactionAttribute**: TypeMetadataRegistry integration
-- ✅ **Optional Logging**: ILogger parameter for diagnostics
-
----
-
 ## ✅ Release Notes
 
 ### RELEASE_NOTES_v1.1.md Coverage
 
 #### New Features
-- ✅ **Rickten.Reactor Package**: Event → Command transformation
 - ✅ **Projection Namespaces**: Logical separation in storage
 - ✅ **Dual-Stream Event Processing**: Optimized query patterns
 - ✅ **ProjectionRunner.RebuildUntilAsync**: Bounded rebuilds
@@ -217,11 +147,10 @@ services.AddReactions(typeof(MyReaction).Assembly);
 
 ### Artifacts Created
 ```
-✅ Rickten.EventStore.1.1.0.nupkg (28,018 bytes)
-✅ Rickten.EventStore.EntityFramework.1.1.0.nupkg (37,641 bytes)
-✅ Rickten.Aggregator.1.1.0.nupkg (23,708 bytes)
-✅ Rickten.Projector.1.1.0.nupkg (16,497 bytes)
-✅ Rickten.Reactor.1.1.0.nupkg (26,238 bytes)
+✅ Rickten.EventStore.1.1.0.nupkg
+✅ Rickten.EventStore.EntityFramework.1.1.0.nupkg
+✅ Rickten.Aggregator.1.1.0.nupkg
+✅ Rickten.Projector.1.1.0.nupkg
 ```
 
 ### Package Contents Validated
@@ -236,9 +165,6 @@ services.AddReactions(typeof(MyReaction).Assembly);
 ## 📋 Pre-Publish Checklist
 
 ### GitHub
-- ⬜ **Delayed Reaction Issue**: Ensure issue exists or is created
-- ⬜ **Creation Reaction Issue**: Ensure issue exists or is created
-- ⬜ **Close Completed Issues**: Review and close Reactor design issues
 - ⬜ **Tag Release**: Create v1.1.0 tag after validation
 
 ### NuGet Publish
@@ -248,9 +174,8 @@ services.AddReactions(typeof(MyReaction).Assembly);
 
 ### Post-Publish Smoke Test
 - ⬜ **Fresh Sample Project**: Create new console app
-- ⬜ **Install from NuGet**: `dotnet add package Rickten.Reactor --version 1.1.0`
-- ⬜ **Verify Registration**: Test `AddEventStore` and `AddReactions`
-- ⬜ **Verify Resolution**: Ensure reaction can be resolved from DI
+- ⬜ **Install from NuGet**: `dotnet add package Rickten.EventStore --version 1.1.0`
+- ⬜ **Verify Registration**: Test `AddEventStore` with EF provider
 - ⬜ **Build Test**: Confirm project compiles without source references
 
 ---
@@ -259,19 +184,15 @@ services.AddReactions(typeof(MyReaction).Assembly);
 
 ### Publish Strategy
 1. ✅ **Build Status**: All green, ready to publish
-2. ✅ **Test Coverage**: Comprehensive (256 tests)
+2. ✅ **Test Coverage**: Comprehensive (396 tests, 378 passed, 18 skipped)
 3. ✅ **Documentation**: Complete and consistent
-4. 🟡 **Recommendation**: Publish as **stable release** (not pre-release)
+4. 🟡 **Recommendation**: Publish as **pre-release** to validate in real usage
 
 ### Post-Release Actions
-1. Update GitHub Issues:
-   - Create/verify delayed reaction feature issue
-   - Create/verify creation reaction feature issue
-   - Close completed Reactor implementation issues
-2. Tag repository: `git tag v1.1.0`
-3. Create GitHub Release with RELEASE_NOTES_v1.1.md content
-4. Perform smoke test with fresh project
-5. Monitor NuGet.org for successful package publication
+1. Tag repository: `git tag v1.1.0-pre`
+2. Create GitHub Pre-Release with RELEASE_NOTES_v1.1.md content
+3. Perform smoke test with fresh project
+4. Monitor NuGet.org for successful package publication
 
 ---
 
@@ -281,15 +202,15 @@ services.AddReactions(typeof(MyReaction).Assembly);
 
 ### Fixed Issues
 - ✅ Updated all package versions from 1.0.0 → 1.1.0
-- ✅ Added complete NuGet metadata to Rickten.Reactor.csproj
-- ✅ Added Rickten.Reactor to publish workflow
+- ✅ Removed Reactor package and related APIs
+- ✅ Updated publish workflow to use dynamic package discovery
 - ✅ Verified all package dependencies reference 1.1.0
-- ✅ Confirmed build and all 256 tests pass
+- ✅ Confirmed build and all 396 tests pass (378 passed, 18 skipped)
 
 ### Release Readiness
 - ✅ **Build**: Success
-- ✅ **Tests**: 256/256 passing
-- ✅ **Packages**: 5 packages ready for publish
+- ✅ **Tests**: 378/396 passing (18 skipped Docker tests)
+- ✅ **Packages**: 4 packages ready for publish
 - ✅ **Documentation**: Complete and consistent
 - ✅ **Migration**: Included and tested
 

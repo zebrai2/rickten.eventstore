@@ -8,7 +8,7 @@ A lightweight, flexible **Event Sourcing** library for .NET with Entity Framewor
 
 ## 📦 Packages
 
-This repository contains five NuGet packages:
+This repository contains four NuGet packages:
 
 ### **Rickten.EventStore**
 Core event sourcing abstractions and contracts. Provides `IEventStore`, `ISnapshotStore`, and `IProjectionStore` interfaces.
@@ -41,24 +41,6 @@ dotnet add package Rickten.Projector
 ```
 
 [📖 Read the Projector documentation →](Rickten.Projector/README.md)
-
-### **Rickten.Reactor**
-Event-driven command execution for Rickten. Build reactions that transform events into commands using projection-based stream selection.
-
-```bash
-dotnet add package Rickten.Reactor
-```
-
-[📖 Read the Reactor documentation →](Rickten.Reactor/README.md)
-
-### **Rickten.Runtime**
-Runtime host for Rickten reactions. Provides background services for continuous reaction execution in .NET Generic Host applications with DI, cancellation, logging, and failure handling.
-
-```bash
-dotnet add package Rickten.Runtime
-```
-
-[📖 Read the Runtime documentation →](Rickten.Runtime/README.md)
 
 ## 📋 Table of Contents
 
@@ -107,7 +89,7 @@ dotnet add package Microsoft.EntityFrameworkCore.Sqlite   # For SQLite
 
 ### ⚠️ Type Registration Requirement
 
-**You must explicitly register assemblies** containing your events, aggregates, projections, commands, and reactions. The event store uses a **type metadata registry** built at startup for efficient type resolution without runtime assembly scanning.
+**You must explicitly register assemblies** containing your events, aggregates, projections, and commands. The event store uses a **type metadata registry** built at startup for efficient type resolution without runtime assembly scanning.
 
 ```csharp
 // Register assemblies when configuring the event store
@@ -385,7 +367,6 @@ var correlationId = streamEvent.Metadata.GetGuid("CorrelationId");
 - If you provide a `CorrelationId` in `AppendMetadata`, it becomes `Source="Client"`
 - If you don't provide a `CorrelationId`, the system auto-generates one with `Source="System"` for the entire batch
 - All events in the same batch share the same `CorrelationId`
-- When propagating `CorrelationId` to reaction events, use the value directly—the reaction will be tagged as `Source="Client"` (since it's client-provided metadata)
 
 **Security Benefit:** Clients cannot spoof system metadata because they only provide `AppendMetadata` (no Source field).
 
@@ -1254,27 +1235,6 @@ var events = new[]
 // - EventMetadata("System", "StreamVersion", version)
 // - EventMetadata("System", "EventId", Guid.NewGuid())
 // - EventMetadata("System", "BatchId", Guid.NewGuid())
-```
-
-**Propagating CorrelationId in Reactions:**
-```csharp
-// In a reaction, get the CorrelationId from trigger event
-var triggerCorrelationId = triggerEvent.Metadata.GetGuid("CorrelationId");
-
-// Propagate it to reaction events
-var reactionEvents = new[]
-{
-    new AppendEvent(
-        new ReactionEvent(...),
-        new[]
-        {
-            new AppendMetadata("CorrelationId", triggerCorrelationId),
-            new AppendMetadata("CausationId", triggerEvent.Metadata.GetGuid("EventId"))
-        })
-};
-
-// The reaction's CorrelationId will be tagged as Source="Client"
-// (even though the trigger may have been Source="System")
 ```
 
 ### 3. **Snapshot Large Aggregates**

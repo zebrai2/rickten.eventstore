@@ -30,17 +30,5 @@ jobs:
     - name: Pack
       run: dotnet pack --configuration Release --no-build --output ./artifacts
 
-    - name: Publish Rickten.EventStore to NuGet
-      run: dotnet nuget push ./artifacts/Rickten.EventStore.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-    - name: Publish Rickten.EventStore.EntityFramework to NuGet
-      run: dotnet nuget push ./artifacts/Rickten.EventStore.EntityFramework.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-    - name: Publish Rickten.Aggregator to NuGet
-      run: dotnet nuget push ./artifacts/Rickten.Aggregator.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-    - name: Publish Rickten.Projector to NuGet
-      run: dotnet nuget push ./artifacts/Rickten.Projector.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-    - name: Publish Rickten.Reactor to NuGet
-      run: dotnet nuget push ./artifacts/Rickten.Reactor.*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+    - name: Publish all packages to NuGet
+      run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -2,13 +2,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Rickten.EventStore\Rickten.EventStore.csproj" />
-    <ProjectReference Include="..\Rickten.Runtime\Rickten.Runtime.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
 </Project>
