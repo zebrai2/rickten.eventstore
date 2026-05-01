@@ -2,8 +2,8 @@ namespace Rickten.EventStore;
 
 /// <summary>
 /// Well-known metadata keys for trace identity and event correlation.
-/// These keys are used by the event store and reaction framework to maintain
-/// traceability across command executions, event causation, and correlation flows.
+/// These keys are used by the event store to maintain traceability across
+/// command executions, event causation, and correlation flows.
 /// </summary>
 public static class EventMetadataKeys
 {
@@ -25,7 +25,7 @@ public static class EventMetadataKeys
 
     /// <summary>
     /// Identifier referencing the EventId of the event that caused this event.
-    /// For reactions, this is the EventId of the trigger event.
+    /// For event-driven workflows, this is the EventId of the trigger event.
     /// For direct command execution, this may be caller-provided or omitted.
     /// Type: Guid (Client or System metadata source depending on origin)
     /// </summary>
@@ -52,12 +52,4 @@ public static class EventMetadataKeys
     /// Type: long (System metadata source)
     /// </summary>
     public const string StreamVersion = "StreamVersion";
-
-    /// <summary>
-    /// The wire name of the reaction that produced this event.
-    /// Format: Reaction.{Name}.{ClassName}
-    /// Added by ReactionRunner when executing reaction-produced commands.
-    /// Type: string (Client metadata source)
-    /// </summary>
-    public const string ReactionWireName = "ReactionWireName";
 }

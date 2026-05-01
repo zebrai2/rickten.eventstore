@@ -290,7 +290,7 @@ public static class EventMetadataExtensions
     /// <summary>
     /// Gets the first EventMetadata entry with the specified key, preserving its source.
     /// Use this when you need to propagate metadata while maintaining its original source
-    /// (e.g., propagating a system-generated CorrelationId through reactions).
+    /// (e.g., propagating a system-generated CorrelationId through event-driven workflows).
     /// </summary>
     /// <param name="metadata">The metadata collection to search.</param>
     /// <param name="key">The metadata key to find.</param>
@@ -298,16 +298,6 @@ public static class EventMetadataExtensions
     public static EventMetadata? GetMetadataWithSource(this IReadOnlyList<EventMetadata> metadata, string key)
     {
         return metadata.FirstOrDefault(m => m.Key == key);
-    }
-
-    /// <summary>
-    /// Gets the wire name of the reaction that produced this event.
-    /// ReactionWireName identifies the reaction that executed the command that produced this event.
-    /// Format: Reaction.{Name}.{ClassName}
-    /// </summary>
-    public static string? GetReactionWireName(this IReadOnlyList<EventMetadata> metadata)
-    {
-        return metadata.GetString(EventMetadataKeys.ReactionWireName);
     }
 }
 
