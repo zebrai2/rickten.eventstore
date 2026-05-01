@@ -90,7 +90,6 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<IEventStore, EventStore>();
         services.TryAddScoped<ISnapshotStore, SnapshotStore>();
         services.TryAddScoped<IProjectionStore, ProjectionStore>();
-        services.TryAddScoped<IReactionRepository, ReactionRepository>();
 
         return services;
     }

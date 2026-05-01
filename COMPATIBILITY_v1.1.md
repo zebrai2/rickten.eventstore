@@ -130,16 +130,6 @@ Namespace (PK) | ProjectionKey (PK) | GlobalPosition | State | ...
 
 ## New Functionality (Additive Only)
 
-### Rickten.Reactor Package
-
-**Status**: ✅ **NEW PACKAGE** - Not a breaking change
-
-- New package: `Rickten.Reactor`
-- New interfaces: `Reaction<TView, TCommand>`, `ReactionAttribute`
-- New runner: `ReactionRunner`
-- Uses `"reaction"` namespace for private projections
-- Does not affect existing code
-
 ### Metadata-Based Expected Version Support
 
 **Status**: ⚠️ **BREAKING CHANGE** (affects commands using CommandVersionMode)

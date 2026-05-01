@@ -19,7 +19,6 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
 - ✅ **Rickten.EventStore.EntityFramework**: 1.1.0
 - ✅ **Rickten.Aggregator**: 1.1.0
 - ✅ **Rickten.Projector**: 1.1.0
-- ✅ **Rickten.Reactor**: 1.1.0 *(New Package)*
 
 ### Documentation Versioning
 - ✅ **RELEASE_NOTES_v1.1.md**: Consistently references version 1.1
@@ -31,8 +30,7 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
 ## ✅ Package Inclusion
 
 ### Solution File (Rickten.slnx)
-- ✅ **Rickten.Reactor** is included in the solution
-- ✅ All 9 projects are present:
+- ✅ All 8 projects are present:
   - Rickten.EventStore
   - Rickten.EventStore.EntityFramework
   - Rickten.EventStore.Tests
@@ -40,44 +38,22 @@ All critical items for the Rickten v1.1.0 release have been validated and correc
   - Rickten.Aggregator.Tests
   - Rickten.Projector
   - Rickten.Projector.Tests
-  - Rickten.Reactor *(New)*
-  - Rickten.Reactor.Tests *(New)*
+  - Rickten.TestUtils
 
 ### NuGet Publish Workflow
-- ✅ **Rickten.Reactor** added to `.github/workflows/publish.yml`
-- ✅ Publish order follows dependency graph:
-  1. Rickten.EventStore
-  2. Rickten.EventStore.EntityFramework
-  3. Rickten.Aggregator
-  4. Rickten.Projector
-  5. Rickten.Reactor *(New)*
+- ✅ Publish workflow uses dynamic package discovery
+- ✅ All packable projects will be published automatically
 
 ### Package Dependencies (Validated via .nupkg)
 - ✅ **Rickten.Aggregator** → Rickten.EventStore 1.1.0
 - ✅ **Rickten.Projector** → Rickten.EventStore 1.1.0
 - ✅ **Rickten.EventStore.EntityFramework** → Rickten.EventStore 1.1.0
-- ✅ **Rickten.Reactor** → Rickten.EventStore 1.1.0, Rickten.Aggregator 1.1.0, Rickten.Projector 1.1.0
 
 ---
 
 ## ✅ NuGet Metadata
 
-All packages include consistent metadata:
-
-### Rickten.Reactor.csproj (New)
-- ✅ **PackageId**: Rickten.Reactor
-- ✅ **Version**: 1.1.0
-- ✅ **Description**: Event-driven command execution for Rickten...
-- ✅ **Authors**: Rickten
-- ✅ **License**: MIT
-- ✅ **RepositoryUrl**: https://github.com/zebrai2/rickten.eventstore
-- ✅ **PackageReadmeFile**: README.md
-- ✅ **PackageIcon**: icon-128.png
-- ✅ **PackageReleaseNotes**: Initial release with support for projection-based reactions...
-- ✅ **Source Link**: Enabled (Microsoft.SourceLink.GitHub)
-- ✅ **Symbols**: Enabled (.snupkg)
-
-All packages follow the same metadata pattern established by existing packages.
+All packages include consistent metadata with proper licensing, repository URLs, README files, icons, source link, and symbols.
 
 ---
 

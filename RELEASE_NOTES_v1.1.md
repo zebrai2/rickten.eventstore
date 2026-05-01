@@ -5,7 +5,7 @@
 
 ## Overview
 
-Rickten 1.1 introduces **Rickten.Reactor** and **projection namespaces**.
+Rickten 1.1 introduces **projection namespaces** and **metadata-based expected version support**.
 
 Most applications using the official Entity Framework projection store can upgrade without changing call sites. Custom `IProjectionStore` implementations must be updated to support the new namespace-aware projection storage contract.
 
@@ -17,59 +17,6 @@ Most applications using the official Entity Framework projection store can upgra
 This is a feature release with a clear implementer note.
 
 ## What's New
-
-### 🎉 New Package: Rickten.Reactor
-
-Event-driven command execution mechanism that completes the Rickten architecture:
-- **Aggregator**: Commands → Events
-- **Projector**: Events → Read Models  
-- **Reactor**: Events → Commands *(NEW!)*
-
-**Key Features**:
-- Projection-based stream selection for one-to-many reactions
-- Dual-checkpoint model (trigger position + projection position)
-- Two-checkpoint recovery with automatic projection rebuild
-- TypeMetadataRegistry integration for validation
-- Optional diagnostic logging
-
-**Example**:
-```csharp
-[Reaction("MembershipDefinitionChanged", EventTypes = new[] { "MembershipDefinition.Changed.v1" })]
-public class MembershipReaction : Reaction<MembershipView, RecalculateCommand>
-{
-    private readonly MembershipProjection _projection = new();
-
-    public MembershipReaction(ITypeMetadataRegistry registry) : base(registry) { }
-
-    public override IProjection<MembershipView> Projection => _projection;
-
-    protected override IEnumerable<StreamIdentifier> SelectStreams(MembershipView view, StreamEvent trigger)
-    {
-        // Use projection to find affected memberships
-        var evt = (MembershipDefinitionChangedEvent)trigger.Event;
-        foreach (var membershipId in view.GetMemberships(evt.DefinitionId))
-        {
-            yield return new StreamIdentifier("Membership", membershipId);
-        }
-    }
-
-    protected override RecalculateCommand BuildCommand(StreamIdentifier stream, MembershipView view, StreamEvent trigger)
-    {
-        return new RecalculateCommand(stream.Identifier, "Definition changed");
-    }
-}
-
-// Execute
-var registry = scope.ServiceProvider.GetRequiredService<ITypeMetadataRegistry>();
-
-await ReactionRunner.CatchUpAsync(
-    eventStore,
-    projectionStore,
-    reaction,
-    folder,
-    decider,
-    registry);
-```
 
 ### 🔐 Metadata-Based Expected Version Support
 
@@ -121,8 +68,8 @@ See [Rickten.Aggregator README](./Rickten.Aggregator/README.md) for details.
 **Namespace Support**:
 - `IProjectionStore` now supports namespaces (default: `"system"`)
 - Public projections use `"system"` namespace
-- Reactions use `"reaction"` namespace for private projections
-- Enables sharing the same database/repository for all projections
+- Enables logical separation of different projection types
+- Allows sharing the same database/repository for all projections
 
 **Benefits**:
 - Simplified infrastructure (one database, one projection table)
@@ -130,21 +77,7 @@ See [Rickten.Aggregator README](./Rickten.Aggregator/README.md) for details.
 - Same `IProjectionStore` implementation for all scenarios
 - Backward compatible with existing code
 
-### ⚡ Performance Improvements
-
-**Dual-Stream Event Processing**:
-- Reactions now merge two filtered event streams by global position
-- Projection stream: All events needed by the projection
-- Trigger stream: Only events that trigger commands
-- Optimal database queries with appropriate filters
-- Clean merge-sort implementation via `MergeEventStreamsByPosition`
-
 ### 📦 Additional Enhancements
-
-**ProjectionRunner**:
-- New `RebuildUntilAsync` method for bounded projection rebuilds
-- Useful for reactions needing historical projection state
-- Pure rebuild method (no persistence)
 
 **ProjectionRunner.CatchUpAsync**:
 - Added optional `namespace` parameter (default: `"system"`)
@@ -236,7 +169,6 @@ dotnet add package Rickten.EventStore --version 1.1.0
 dotnet add package Rickten.EventStore.EntityFramework --version 1.1.0
 dotnet add package Rickten.Aggregator --version 1.1.0
 dotnet add package Rickten.Projector --version 1.1.0
-dotnet add package Rickten.Reactor --version 1.1.0  # NEW
 ```
 
 ### Upgrade from v1.0
@@ -248,7 +180,6 @@ See [UPGRADE_v1.1.md](./UPGRADE_v1.1.md) for detailed upgrade instructions.
 - **Getting Started**: See package README files
 - **Upgrade Guide**: [UPGRADE_v1.1.md](./UPGRADE_v1.1.md)
 - **Compatibility**: [COMPATIBILITY_v1.1.md](./COMPATIBILITY_v1.1.md)
-- **Design Concepts**: [Rickten.Reactor/DESIGN_TRIANGLE.md](./Rickten.Reactor/DESIGN_TRIANGLE.md)
 - **Migration Guide**: [Migrations/README.md](./Rickten.EventStore.EntityFramework/Migrations/README.md)
 
 ## Requirements
@@ -273,8 +204,8 @@ We welcome your feedback:
 
 ## What's Next (v1.2 Roadmap)
 
-- [ ] Hosted service support for continuous reaction processing
-- [ ] Reaction scheduling and retry policies
+- [ ] Event-driven command execution (Reactor)
+- [ ] Hosted service support for continuous processing
 - [ ] Performance benchmarks and optimization
 - [ ] Additional projection store implementations (Redis, Cosmos DB)
 - [ ] Distributed tracing support (OpenTelemetry)
