@@ -93,7 +93,7 @@ public static async Task<(TView View, long GlobalPosition)> CatchUpAsync<TView>(
 
 **Status**: ✅ **NEW METHOD** - Not a breaking change (additive only)
 
-This method was added to support bounded projection rebuilds for reactions. It doesn't modify or replace any existing methods.
+This method was added to support bounded projection rebuilds. It doesn't modify or replace any existing methods.
 
 ## Database Schema Changes
 
@@ -252,9 +252,9 @@ Following [Semantic Versioning 2.0.0](https://semver.org/):
 **v1.1.0 Justification**:
 - **MAJOR (1)**: No incompatible API changes for standard usage
 - **MINOR (1)**: New functionality added in backward-compatible manner
-  - New `Rickten.Reactor` package
   - New optional parameters with defaults
   - New `RebuildUntilAsync` method
+  - Projection namespace support
 - **PATCH (0)**: Not a patch release (includes new features)
 
 **Why Not v2.0.0?**
@@ -288,7 +288,7 @@ Following [Semantic Versioning 2.0.0](https://semver.org/):
 ✅ **Version 1.1.0 is appropriate**
 
 This is a non-breaking minor version that:
-- Adds new features (Reactor, namespace support)
+- Adds new features (namespace support, bounded rebuilds)
 - Maintains backward compatibility for standard usage
 - Provides clear migration path for edge cases
 - Follows semantic versioning best practices
@@ -297,9 +297,8 @@ This is a non-breaking minor version that:
 ## Testing Verification
 
 All existing tests pass without modification:
-- ✅ Rickten.EventStore.Tests (48 tests passing)
-- ✅ Rickten.Aggregator.Tests (36 tests passing)
-- ✅ Rickten.Projector.Tests (12 tests passing)
-- ✅ Rickten.Reactor.Tests (14 tests passing)
+- ✅ Rickten.EventStore.Tests (206 tests passing, 18 skipped)
+- ✅ Rickten.Aggregator.Tests (126 tests passing)
+- ✅ Rickten.Projector.Tests (46 tests passing)
 
 No test code required changes for v1.1 compatibility.
