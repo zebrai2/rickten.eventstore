@@ -10,7 +10,7 @@
   <!-- Package Metadata -->
   <PropertyGroup>
     <PackageId>Rickten.EventStore.EntityFramework</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.EventStore.EntityFramework</Product>
@@ -20,10 +20,10 @@
     <PackageProjectUrl>https://github.com/zebrai2/rickten.eventstore</PackageProjectUrl>
     <RepositoryUrl>https://github.com/zebrai2/rickten.eventstore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;dotnet;csharp</PackageTags>
+    <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;dotnet;csharp;migrations</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon-128.png</PackageIcon>
-    <PackageReleaseNotes>v1.2.0: Added optional schema support for multi-tenant and bounded context scenarios. EventStoreDbContext now accepts an optional schema parameter, enabling database schema isolation while maintaining full backward compatibility.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.0: Added Entity Framework Core migrations support. Includes InitialCreate migration with complete schema for Events, Snapshots, and Projections tables. Updated to EF Core 10.0.8. Added design-time DbContext factory for migrations tooling.</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
