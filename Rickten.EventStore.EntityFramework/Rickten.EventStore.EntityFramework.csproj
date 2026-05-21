@@ -10,7 +10,7 @@
   <!-- Package Metadata -->
   <PropertyGroup>
     <PackageId>Rickten.EventStore.EntityFramework</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.EventStore.EntityFramework</Product>
@@ -23,7 +23,7 @@
     <PackageTags>event-sourcing;cqrs;ddd;entity-framework;ef-core;event-store;snapshots;projections;sql-server;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon-128.png</PackageIcon>
-    <PackageReleaseNotes>Initial release with Entity Framework Core support for event sourcing, snapshots, and projections. Includes dependency injection extensions.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.2.0: Added optional schema support for multi-tenant and bounded context scenarios. EventStoreDbContext now accepts an optional schema parameter, enabling database schema isolation while maintaining full backward compatibility.</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
