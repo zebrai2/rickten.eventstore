@@ -10,7 +10,7 @@
   <!-- Package Metadata -->
   <PropertyGroup>
 	<PackageId>Rickten.Aggregator</PackageId>
-	<Version>1.2.0</Version>
+	<Version>1.3.0</Version>
 	<Authors>Rickten</Authors>
 	<Company>Rickten</Company>
 	<Product>Rickten.Aggregator</Product>
@@ -23,7 +23,7 @@
 	<PackageTags>event-sourcing;aggregates;cqrs;ddd;domain-driven-design;event-store;dotnet;csharp</PackageTags>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<PackageIcon>icon-128.png</PackageIcon>
-	<PackageReleaseNotes>Initial release with support for event-sourced aggregates, state folders, and command deciders.</PackageReleaseNotes>
+	<PackageReleaseNotes>v1.3.0: Updated dependencies to support Entity Framework Core migrations.</PackageReleaseNotes>
 	<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 

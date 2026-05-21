@@ -10,7 +10,7 @@
   <!-- Package Metadata -->
   <PropertyGroup>
     <PackageId>Rickten.EventStore</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.EventStore</Product>
@@ -23,7 +23,7 @@
     <PackageTags>event-sourcing;cqrs;ddd;domain-driven-design;event-store;snapshots;projections;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon-128.png</PackageIcon>
-    <PackageReleaseNotes>Initial release with support for event sourcing, snapshots, and projections.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.0: Updated dependencies to support Entity Framework Core migrations.</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 

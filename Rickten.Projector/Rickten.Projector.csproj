@@ -10,7 +10,7 @@
   <!-- Package Metadata -->
   <PropertyGroup>
     <PackageId>Rickten.Projector</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>Rickten</Authors>
     <Company>Rickten</Company>
     <Product>Rickten.Projector</Product>
@@ -23,7 +23,7 @@
     <PackageTags>event-sourcing;projections;read-models;cqrs;event-store;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon-128.png</PackageIcon>
-    <PackageReleaseNotes>Initial release with support for event-sourced projections, declarative filtering, and checkpoint management.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.0: Updated dependencies to support Entity Framework Core migrations.</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
