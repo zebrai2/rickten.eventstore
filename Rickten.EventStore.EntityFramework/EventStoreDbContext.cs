@@ -8,13 +8,17 @@ namespace Rickten.EventStore.EntityFramework;
 /// </summary>
 public sealed class EventStoreDbContext : DbContext
 {
+    private readonly string? _schema;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="EventStoreDbContext"/> class.
     /// </summary>
     /// <param name="options">The options for this context.</param>
-    public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
+    /// <param name="schema">Optional database schema name. If not provided, uses the provider's default schema.</param>
+    public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options, string? schema = null)
         : base(options)
     {
+        _schema = schema;
     }
 
     /// <summary>
@@ -41,6 +45,12 @@ public sealed class EventStoreDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Apply custom schema if provided
+        if (!string.IsNullOrWhiteSpace(_schema))
+        {
+            modelBuilder.HasDefaultSchema(_schema);
+        }
 
         var utcNowSql = GetUtcNowSql();
 
